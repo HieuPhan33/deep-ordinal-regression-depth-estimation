@@ -135,7 +135,7 @@ class ordLoss(nn.Module):
             for i in range(ord_num):
                 K[:, i, :, :] = K[:, i, :, :] + i * torch.ones((N, H, W), dtype=torch.int)
 
-        mask_0 = (K <= target).detach()
+        mask_0 = (K <= target).detach() # Mask all pixel < rank K as 0
         mask_1 = (K > target).detach()
 
         one = torch.ones(ord_labels[mask_1].size())

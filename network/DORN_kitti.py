@@ -6,8 +6,6 @@
 
 import torch
 import torch.nn as nn
-import torchvision.models
-import collections
 import math
 
 from network.backbone import resnet101

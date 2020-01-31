@@ -22,9 +22,20 @@ class Bottleneck(nn.Module):
     expansion = 4
 
     def __init__(self, inplanes, planes, stride=1, dilation=1, downsample=None, fist_dilation=1, multi_grid=1):
+        '''
+        :param inplanes: in_channels
+        :param planes: out_channel = planes * 4
+        :param stride:
+        :param dilation:
+        :param downsample: adapter_block
+        :param fist_dilation:
+        :param multi_grid: list of scales
+        '''
         super(Bottleneck, self).__init__()
         self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
         self.bn1 = BatchNorm2d(planes)
+        # Each grid corresponds to one scale-space in the input
+        # Output = ((input - 1 // s) + 1)
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride,
                                padding=dilation * multi_grid, dilation=dilation * multi_grid, bias=False)
         self.bn2 = BatchNorm2d(planes)
@@ -61,16 +72,24 @@ class Bottleneck(nn.Module):
 
 class ResNet(nn.Module):
     def __init__(self, block, layers):
-        self.inplanes = 128
+        '''
+        :param block: The architecture of residual block
+        :param layers: The number layers in each block
+        '''
+        self.inplanes = 64 #128
         super(ResNet, self).__init__()
-        self.conv1 = conv3x3(3, 64, stride=2)
+        #self.conv1 = conv3x3(3, 64, stride=2)
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2,
+                     padding=1, bias=False)
         self.bn1 = BatchNorm2d(64)
         self.relu1 = nn.ReLU(inplace=False)
         self.conv2 = conv3x3(64, 64)
         self.bn2 = BatchNorm2d(64)
         self.relu2 = nn.ReLU(inplace=False)
-        self.conv3 = conv3x3(64, 128)
-        self.bn3 = BatchNorm2d(128)
+        # self.conv3 = conv3x3(64, 128)
+        # self.bn3 = BatchNorm2d(128)
+        self.conv3 = conv3x3(64, self.inplanes)
+        self.bn3 = BatchNorm2d(self.inplanes)
         self.relu3 = nn.ReLU(inplace=False)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
@@ -81,10 +100,10 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=1, dilation=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=1, dilation=4, multi_grid=(1, 1, 1))
 
-    def _make_layer(self, block, planes, blocks, stride=1, dilation=1, multi_grid=1):
+    def _make_layer(self, block, planes, n_layers, stride=1, dilation=1, multi_grid=1):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
-            downsample = nn.Sequential(
+            downsample = nn.Sequential( # Adapter to ensure input and residual having the same dimensions for combination
                 nn.Conv2d(self.inplanes, planes * block.expansion,
                           kernel_size=1, stride=stride, bias=False),
                 BatchNorm2d(planes * block.expansion, affine=affine_par))
@@ -94,7 +113,7 @@ class ResNet(nn.Module):
         layers.append(block(self.inplanes, planes, stride, dilation=dilation, downsample=downsample,
                             multi_grid=generate_multi_grid(0, multi_grid)))
         self.inplanes = planes * block.expansion
-        for i in range(1, blocks):
+        for i in range(1, n_layers):
             layers.append(
                 block(self.inplanes, planes, dilation=dilation, multi_grid=generate_multi_grid(i, multi_grid)))
 
@@ -122,7 +141,7 @@ def resnet101(pretrained=True):
 
     if pretrained:
         # saved_state_dict = torch.load('./network/pretrained_models/resnet101-imagenet.pth')
-        saved_state_dict = torch.load('./pretrained_models/resnet101-imagenet.pth')
+        saved_state_dict = torch.load('../pretrained_models/resnet101-5d3b4d8f.pth')
         new_params = resnet101.state_dict().copy()
         for i in saved_state_dict:
             i_parts = i.split('.')

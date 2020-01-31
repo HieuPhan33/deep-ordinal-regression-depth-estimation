@@ -4,7 +4,6 @@
  @Author  : Wang Xin
  @Email   : wangxin_buaa@163.com
 """
-
 from datetime import datetime
 import shutil
 import socket
@@ -28,6 +27,7 @@ import random
 from network.get_models import get_models
 
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1"  # use single GPU
+#os.environ["CUDA_VISIBLE_DEVICES"] = "5,6,7"
 
 args = utils.parse_command()
 print(args)
