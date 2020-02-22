@@ -58,7 +58,6 @@ After obtaining ordinal labels for each position od Image,
 the predicted depth value d(w, h) can be decoded as below.
 """
 
-
 def get_depth_sid(args, labels):
     if args.dataset == 'kitti':
         min = 0.001

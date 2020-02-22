@@ -76,6 +76,31 @@ class ScaleInvariantError(nn.Module):
         loss = torch.mean(d * d) - self.lamada * torch.mean(d) * torch.mean(d)
         return loss
 
+class probabilisticOrdLoss(nn.SmoothL1Loss):
+    def __init__(self,args):
+        super(probabilisticOrdLoss, self).__init__()
+        self.loss = 0.0
+        self.args = args
+
+    def forward(self,ord_labels,target):
+        """
+        :param ord_labels: ordinal labels for each position of Image I.
+        :param target:     the ground_truth discreted using SID strategy.
+        :return: ordinal loss
+        """
+        N, C, H, W = ord_labels.size()
+        ord_num = C
+        if torch.cuda.is_available() and self.args.gpu:
+            K = torch.zeros((N, C, H, W), dtype=torch.int).cuda()
+            for i in range(ord_num):
+                if i <=  target:
+                    K[:, i, :, :] = K[:, i, :, :] + torch.ones((N, H, W), dtype=torch.int).cuda()
+        else:
+            K = torch.zeros((N, C, H, W), dtype=torch.int)
+            for i in range(ord_num):
+                if i <= target:
+                    K[:, i, :, :] = K[:, i, :, :] + i * torch.ones((N, H, W), dtype=torch.int)
+        return super().forward(ord_labels,K)
 
 class ordLoss(nn.Module):
     """
@@ -87,6 +112,7 @@ class ordLoss(nn.Module):
         super(ordLoss, self).__init__()
         self.loss = 0.0
         self.args = args
+
 
     def forward(self, ord_labels, target):
         """

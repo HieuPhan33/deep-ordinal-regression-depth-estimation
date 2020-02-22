@@ -206,9 +206,10 @@ class OrdinalRegressionLayer(nn.Module):
         ord_c1 = ord_c[:, 1, :].clone() # Response corresponding to 1
         ord_c1 = ord_c1.view(-1, ord_num, H, W)
         print('ord > 0.5 size:', (ord_c1 > 0.5).size())
-        decode_c = torch.sum((ord_c1 > 0.5), dim=1).view(-1, 1, H, W) # The one-label pixel corresponds to one rank
+        #decode_c = torch.sum((ord_c1 > 0.5), dim=1).view(-1, 1, H, W) # The one-label pixel corresponds to one rank
         # decode_c = torch.sum(ord_c1, dim=1).view(-1, 1, H, W)
         # Derive rank based on probabilistic
+
         return decode_c, ord_c1
 
 
