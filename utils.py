@@ -12,7 +12,6 @@ from PIL import Image
 
 cmap = plt.cm.jet
 
-
 def parse_command():
     import argparse
     parser = argparse.ArgumentParser(description='DORN')
@@ -34,7 +33,7 @@ def parse_command():
     parser.add_argument('--dataset', default='nyu', type=str,
                         help='dataset used for training, kitti and nyu is available')
     parser.add_argument('--manual_seed', default=1, type=int, help='Manually set random seed')
-    parser.add_argument('--gpu', default='1', type=str, help='if not none, use Single GPU')
+    parser.add_argument('--gpu', default=None, type=str, help='if not none, use Single GPU')
     parser.add_argument('--print-freq', '-p', default=10, type=int,
                         metavar='N', help='print frequency (default: 10)')
     args = parser.parse_args()
@@ -67,12 +66,16 @@ def get_depth_sid(args, labels):
         K = 71.0
     elif args.dataset == 'nyu':
         min = 0.02
-        max = 80.0
+        max = 10.0
+        K = 68.0
+    elif args.dataset == 'uow_dataset':
+        min = 0.001
+        max = 156
         K = 68.0
     else:
         print('No Dataset named as ', args.dataset)
 
-    if torch.cuda.is_available():
+    if torch.cuda.is_available() and args.gpu:
         alpha_ = torch.tensor(min).cuda()
         beta_ = torch.tensor(max).cuda()
         K_ = torch.tensor(K).cuda()
@@ -80,7 +83,7 @@ def get_depth_sid(args, labels):
         alpha_ = torch.tensor(min)
         beta_ = torch.tensor(max)
         K_ = torch.tensor(K)
-
+    labels = labels.float()
     # print('label size:', labels.size())
     # depth = torch.exp(torch.log(alpha_) + torch.log(beta_ / alpha_) * labels / K_)
     depth = alpha_ * (beta_ / alpha_) ** (labels / K_)
@@ -97,21 +100,26 @@ def get_labels_sid(args, depth):
         alpha = 0.02
         beta = 10.0
         K = 68.0
-    else:
+    elif args.dataset == 'uow_dataset':
+        alpha = 0.001
+        beta = 156
+        K = 68.0
+    else: # 0.1 0.9   -> 0 1    => 2k = 0.1 -> -0.1
         print('No Dataset named as ', args.dataset)
 
     alpha = torch.tensor(alpha)
     beta = torch.tensor(beta)
     K = torch.tensor(K)
 
-    if torch.cuda.is_available():
+    if torch.cuda.is_available() and args.gpu:
         alpha = alpha.cuda()
         beta = beta.cuda()
         K = K.cuda()
 
     labels = K * torch.log(depth / alpha) / torch.log(beta / alpha)
-    if torch.cuda.is_available():
-        labels = labels.cuda()
+    # if torch.cuda.is_available() and args.gpu:
+    #     labels = labels.cuda()
+    # return labels.int()
     return labels.int()
 
 

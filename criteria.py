@@ -83,9 +83,10 @@ class ordLoss(nn.Module):
     over the entire image domain:
     """
 
-    def __init__(self):
+    def __init__(self,args):
         super(ordLoss, self).__init__()
         self.loss = 0.0
+        self.args = args
 
     def forward(self, ord_labels, target):
         """
@@ -126,7 +127,7 @@ class ordLoss(nn.Module):
         #                  + torch.sum(torch.log(torch.clamp(one - p_k[mask_1], min = 1e-7, max = 1e7)))
 
         # faster version
-        if torch.cuda.is_available():
+        if torch.cuda.is_available() and self.args.gpu:
             K = torch.zeros((N, C, H, W), dtype=torch.int).cuda()
             for i in range(ord_num):
                 K[:, i, :, :] = K[:, i, :, :] + i * torch.ones((N, H, W), dtype=torch.int).cuda()
@@ -139,8 +140,10 @@ class ordLoss(nn.Module):
         mask_1 = (K > target).detach()
 
         one = torch.ones(ord_labels[mask_1].size())
-        if torch.cuda.is_available():
+        if torch.cuda.is_available() and self.args.gpu:
             one = one.cuda()
+            # mask_0 = mask_0.detach()
+            # mask_1 = mask_1.detach()
 
         self.loss += torch.sum(torch.log(torch.clamp(ord_labels[mask_0], min=1e-8, max=1e8))) \
                      + torch.sum(torch.log(torch.clamp(one - ord_labels[mask_1], min=1e-8, max=1e8)))

@@ -9,7 +9,7 @@ import torch.nn as nn
 import math
 from torchvision import models
 
-from network.backbone import resnet101
+from network.backbone import resnet101,resnet18
 
 
 def weights_init(modules, type='xavier'):
@@ -89,14 +89,16 @@ def weights_init(modules, type='xavier'):
 
 
 class FullImageEncoder(nn.Module):
-    def __init__(self):
+    def __init__(self,channels):
         super(FullImageEncoder, self).__init__()
-        self.global_pooling = nn.AvgPool2d(8, stride=8, padding=(4, 2))  # KITTI 16 16
+        self.channels = channels
+        self.global_pooling = nn.AvgPool2d(kernel_size=3
+                                           , stride=3)  # KITTI 16 16
         self.dropout = nn.Dropout2d(p=0.5)
-        self.global_fc = nn.Linear(2048 * 6 * 5, 512)
+        self.global_fc = nn.Linear(self.channels*3*4, 512)
         self.relu = nn.ReLU(inplace=True)
-        self.conv1 = nn.Conv2d(512, 512, 1)  # 1x1 卷积
-        self.upsample = nn.UpsamplingBilinear2d(size=(33, 45))  # KITTI 49X65 NYU 33X45
+        self.conv1 = nn.Conv2d(512, 512, 1)  # Cross-channel projection
+        self.upsample = nn.UpsamplingBilinear2d(size=(33, 45))  # Copy to Feature vector of NYU 33X45
 
         weights_init(self.modules(), 'xavier')
 
@@ -104,50 +106,55 @@ class FullImageEncoder(nn.Module):
         x1 = self.global_pooling(x)
         # print('# x1 size:', x1.size())
         x2 = self.dropout(x1)
-        x3 = x2.view(-1, 2048 * 6 * 5)
+        x3 = x2.view(-1, self.channels * 3 * 4) # Flatten out ready to leaarn globally by FC
         x4 = self.relu(self.global_fc(x3))
         # print('# x4 size:', x4.size())
         x4 = x4.view(-1, 512, 1, 1)
         # print('# x4 size:', x4.size())
         x5 = self.conv1(x4)
-        out = self.upsample(x5)
+        out = self.upsample(x5) # Copy
         return out
 
 
 class SceneUnderstandingModule(nn.Module):
     def __init__(self):
         super(SceneUnderstandingModule, self).__init__()
-        self.encoder = FullImageEncoder()
+        self.channels = 512
+        self.encoder = FullImageEncoder(self.channels)
         self.aspp1 = nn.Sequential(
-            nn.Conv2d(2048, 512, 1),
+            nn.Conv2d(self.channels, 512, 1),
             nn.ReLU(inplace=True),
             nn.Conv2d(512, 512, 1),
-            nn.ReLU(inplace=True)
+            nn.ReLU(inplace=True),
+            nn.UpsamplingBilinear2d(size=(33, 45))
         )
         self.aspp2 = nn.Sequential(
-            nn.Conv2d(2048, 512, 3, padding=6, dilation=6),
+            nn.Conv2d(self.channels, 512, 3, padding=6, dilation=6), # w + 1
             nn.ReLU(inplace=True),
             nn.Conv2d(512, 512, 1),
-            nn.ReLU(inplace=True)
+            nn.ReLU(inplace=True),
+            nn.UpsamplingBilinear2d(size=(33, 45))
         )
         self.aspp3 = nn.Sequential(
-            nn.Conv2d(2048, 512, 3, padding=12, dilation=12),
+            nn.Conv2d(self.channels, 512, 3, padding=12, dilation=12),
             nn.ReLU(inplace=True),
             nn.Conv2d(512, 512, 1),
-            nn.ReLU(inplace=True)
+            nn.ReLU(inplace=True),
+            nn.UpsamplingBilinear2d(size=(33, 45))
         )
         self.aspp4 = nn.Sequential(
-            nn.Conv2d(2048, 512, 3, padding=18, dilation=18),
+            nn.Conv2d(self.channels, 512, 3, padding=18, dilation=18),
             nn.ReLU(inplace=True),
             nn.Conv2d(512, 512, 1),
-            nn.ReLU(inplace=True)
+            nn.ReLU(inplace=True),
+            nn.UpsamplingBilinear2d(size=(33, 45))
         )
         self.concat_process = nn.Sequential(
             nn.Dropout2d(p=0.5),
-            nn.Conv2d(512 * 5, 2048, 1),
+            nn.Conv2d(512 * 5, self.channels, 1),
             nn.ReLU(inplace=True),
             nn.Dropout2d(p=0.5),
-            nn.Conv2d(2048, 136, 1),  # KITTI 142 NYU 136 In paper, K = 80 is best, so use 160 is good!
+            nn.Conv2d(self.channels, 136, 1),  # Number of labels : KITTI 71 NYU 68
             # nn.UpsamplingBilinear2d(scale_factor=8)
             nn.UpsamplingBilinear2d(size=(257, 353))
         )
@@ -201,6 +208,7 @@ class OrdinalRegressionLayer(nn.Module):
         print('ord > 0.5 size:', (ord_c1 > 0.5).size())
         decode_c = torch.sum((ord_c1 > 0.5), dim=1).view(-1, 1, H, W) # The one-label pixel corresponds to one rank
         # decode_c = torch.sum(ord_c1, dim=1).view(-1, 1, H, W)
+        # Derive rank based on probabilistic
         return decode_c, ord_c1
 
 
@@ -211,7 +219,10 @@ class DORN(nn.Module):
         self.output_size = output_size
         self.channel = channel
         #self.feature_extractor = resnet101(pretrained=pretrained)
-        self.feature_extractor = models.resnet18(pretrained=True)
+        #self.feature_extractor = models.resnet18(pretrained=pretrained)
+        #self.feature_extractor = resnet18(pretrained=pretrained)
+        model = models.resnet18(pretrained=True)
+        self.feature_extractor = torch.nn.Sequential(*(list(model.children())[:-2]))
         self.aspp_module = SceneUnderstandingModule()
         self.orl = OrdinalRegressionLayer()
 

@@ -42,29 +42,36 @@ best_result.set_to_worst()
 
 
 def create_loader(args):
-    root_dir = Path.db_root_dir(args.dataset)
+    #root_dir = Path.db_root_dir(args.dataset)
     if args.dataset == 'kitti':
-        train_set = KittiFolder(root_dir, mode='train', size=(385, 513))
-        test_set = KittiFolder(root_dir, mode='test', size=(385, 513))
-        train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True,
-                                                   num_workers=args.workers, pin_memory=True)
-        test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False,
-                                                  num_workers=args.workers, pin_memory=True)
-        return train_loader, test_loader
+        # train_set = KittiFolder(root_dir, mode='train', size=(385, 513))
+        # test_set = KittiFolder(root_dir, mode='test', size=(385, 513))
+        # train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True,
+        #                                            num_workers=args.workers, pin_memory=True)
+        # test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False,
+        #                                           num_workers=args.workers, pin_memory=True)
+        # return train_loader, test_loader
+        ## TODO implement KITTI
+        assert "Not implemented"
     else:
-        traindir = os.path.join(root_dir, 'train')
-        if os.path.exists(traindir):
-            print('Train dataset "{}" is existed!'.format(traindir))
-        else:
-            print('Train dataset "{}" is not existed!'.format(traindir))
-            exit(-1)
-
-        valdir = os.path.join(root_dir, 'val')
-        if os.path.exists(traindir):
-            print('Train dataset "{}" is existed!'.format(valdir))
-        else:
-            print('Train dataset "{}" is not existed!'.format(valdir))
-            exit(-1)
+        # traindir = os.path.join(root_dir, 'train')
+        # if os.path.exists(traindir):
+        #     print('Train dataset "{}" is existed!'.format(traindir))
+        # else:
+        #     print('Train dataset "{}" is not existed!'.format(traindir))
+        #     exit(-1)
+        #
+        # valdir = os.path.join(root_dir, 'val')
+        # if os.path.exists(traindir):
+        #     print('Train dataset "{}" is existed!'.format(valdir))
+        # else:
+        #     print('Train dataset "{}" is not existed!'.format(valdir))
+        #     exit(-1)
+        # Data loading code
+        print("=> creating data loaders...")
+        data_dir = '/media/vasp/Data2/Users/vmhp806/depth-estimation'
+        valdir = os.path.join(data_dir, 'data', args.dataset, 'val')
+        traindir = os.path.join(data_dir, 'data', args.dataset, 'train')
 
         train_set = nyu_dataloader.NYUDataset(traindir, type='train')
         val_set = nyu_dataloader.NYUDataset(valdir, type='val')
@@ -86,12 +93,12 @@ def main():
     torch.cuda.manual_seed(args.manual_seed)
     np.random.seed(args.manual_seed)
     random.seed(args.manual_seed)
-
-    if torch.cuda.device_count() > 1:
-        print("Let's use", torch.cuda.device_count(), "GPUs!")
-        args.batch_size = args.batch_size * torch.cuda.device_count()
-    else:
-        print("Let's use GPU ", torch.cuda.current_device())
+    if args.gpu:
+        if torch.cuda.device_count() > 1:
+            print("Let's use", torch.cuda.device_count(), "GPUs!")
+            args.batch_size = args.batch_size * torch.cuda.device_count()
+        else:
+            print("Let's use GPU ", torch.cuda.current_device())
 
     train_loader, val_loader = create_loader(args)
 
@@ -127,14 +134,15 @@ def main():
         optimizer = torch.optim.SGD(train_params, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
 
         # You can use DataParallel() whether you use Multi-GPUs or not
-        model = nn.DataParallel(model).cuda()
+        if args.gpu:
+            model = nn.DataParallel(model).cuda()
 
     # when training, use reduceLROnPlateau to reduce learning rate
     scheduler = lr_scheduler.ReduceLROnPlateau(
         optimizer, 'min', patience=args.lr_patience)
 
     # loss function
-    criterion = criteria.ordLoss()
+    criterion = criteria.ordLoss(args)
 
     # create directory path
     output_directory = utils.get_output_directory(args)
@@ -211,10 +219,11 @@ def train(train_loader, model, criterion, optimizer, epoch, logger):
     for i, (input, target) in enumerate(train_loader):
 
         # itr_count += 1
-        input, target = input.cuda(), target.cuda()
+        if args.gpu:
+            input, target = input.cuda(), target.cuda()
         # print('input size  = ', input.size())
         # print('target size = ', target.size())
-        torch.cuda.synchronize()
+            torch.cuda.synchronize()
         data_time = time.time() - end
 
         # compute pred
@@ -228,7 +237,8 @@ def train(train_loader, model, criterion, optimizer, epoch, logger):
             loss.backward()  # compute gradient and do SGD step
             optimizer.step()
 
-        torch.cuda.synchronize()
+        if args.gpu:
+            torch.cuda.synchronize()
         gpu_time = time.time() - end
 
         # measure accuracy and record loss
@@ -275,17 +285,17 @@ def validate(val_loader, model, epoch, logger):
     img_list = []
 
     for i, (input, target) in enumerate(val_loader):
-
-        input, target = input.cuda(), target.cuda()
-        torch.cuda.synchronize()
+        if args.gpu:
+            input, target = input.cuda(), target.cuda()
+            torch.cuda.synchronize()
         data_time = time.time() - end
 
         # compute output
         end = time.time()
         with torch.no_grad():
             pred, _ = model(input)
-
-        torch.cuda.synchronize()
+        if args.gpu:
+            torch.cuda.synchronize()
         gpu_time = time.time() - end
 
         # measure accuracy and record loss
