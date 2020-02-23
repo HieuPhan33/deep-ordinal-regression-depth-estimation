@@ -14,7 +14,6 @@ from torch.optim import lr_scheduler
 
 from dataloaders import nyu_dataloader
 from dataloaders.kitti_dataloader import KittiFolder
-from dataloaders.path import Path
 from metrics import AverageMeter, Result
 import utils
 import criteria
@@ -69,7 +68,7 @@ def create_loader(args):
         #     exit(-1)
         # Data loading code
         print("=> creating data loaders...")
-        data_dir = '/media/vasp/Data2/Users/vmhp806/depth-estimation'
+        data_dir = '..'
         valdir = os.path.join(data_dir, 'data', args.dataset, 'val')
         traindir = os.path.join(data_dir, 'data', args.dataset, 'train')
 

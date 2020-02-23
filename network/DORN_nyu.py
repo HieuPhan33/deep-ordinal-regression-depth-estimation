@@ -212,13 +212,13 @@ class OrdinalRegressionLayer(nn.Module):
 
         # Create new temp matrix to compute probability corresponding to each rank r:
         # Pr(k=r) = Pr(k>r-1) - Pr(k>r) and Pr(k=0) = 1-Pr(k>0) and Pr(k=K) = Pr(k>K-1)
-        temp = torch.zeros((N, C + 2, H, W))
+        temp = torch.zeros((N, ord_num+ 2, H, W))
         temp[:, 0, :, :] = torch.ones((N, H, W))
-        temp[:, 1:C + 1, :, :] = ord_c[:, 1, :]
-        prob = torch.zeros((N,C+1,H,W))
-        for i in range(C+1):
-            prob[:,i+1,:,:] = temp[:,i+1,:,:] - temp[:,i,:,:]
-        decode_c = torch.argmax(prob,dim=1)
+        temp[:, 1:ord_num + 1, :, :] = ord_c1
+        prob = torch.zeros((N,ord_num+1,H,W))
+        for i in range(ord_num+1):
+            prob[:,i,:,:] = temp[:,i+1,:,:] - temp[:,i,:,:]
+        decode_c = torch.argmax(prob,dim=1).view(-1,1,H,W) # Matching the shape of the target -> N x 1 x H x W
         # Derive rank based on probabilistic
 
         return decode_c, ord_c1
