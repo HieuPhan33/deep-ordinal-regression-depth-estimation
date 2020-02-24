@@ -122,6 +122,7 @@ class SceneUnderstandingModule(nn.Module):
         total_ord_label = 68 # For NYU
         self.channels = 512
         self.encoder = FullImageEncoder(self.channels)
+        total_K = (total_ord_label-1)*2
         self.aspp1 = nn.Sequential(
             nn.Conv2d(self.channels, 512, 1),
             nn.ReLU(inplace=True),
@@ -155,9 +156,10 @@ class SceneUnderstandingModule(nn.Module):
             nn.Conv2d(512 * 5, self.channels, 1),
             nn.ReLU(inplace=True),
             nn.Dropout2d(p=0.5),
-            nn.Conv2d(self.channels, (total_ord_label-1)*2, 1),  # Number of labels : KITTI 71 NYU 68
+            nn.Conv2d(self.channels, total_K, 1),  # Number of labels : KITTI 71 NYU 68
             # nn.UpsamplingBilinear2d(scale_factor=8)
-            nn.UpsamplingBilinear2d(size=(257, 353))
+            nn.UpsamplingBilinear2d(size=(257, 353)),
+            nn.Conv2d(total_K,total_K, 1)
         )
 
         weights_init(self.modules(), type='xavier')
@@ -220,6 +222,8 @@ class OrdinalRegressionLayer(nn.Module):
             prob[:,i,:,:] = temp[:,i+1,:,:] - temp[:,i,:,:]
         decode_c = torch.argmax(prob,dim=1).view(-1,1,H,W) # Matching the shape of the target -> N x 1 x H x W
         # Derive rank based on probabilistic
+        if torch.cuda.is_available():
+            decode_c = decode_c.cuda()
 
         return decode_c, ord_c1
 

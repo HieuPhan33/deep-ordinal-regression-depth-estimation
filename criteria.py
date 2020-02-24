@@ -38,13 +38,12 @@ class berHuLoss(nn.Module):
     def __init__(self):
         super(berHuLoss, self).__init__()
 
-    def forward(self, pred, target):
+    def forward(self, pred, target, valid_mask):
         assert pred.dim() == target.dim(), "inconsistent dimensions"
 
         huber_c = torch.max(pred - target)
         huber_c = 0.2 * huber_c
 
-        valid_mask = (target > 0).detach()
         diff = target - pred
         diff = diff[valid_mask]
         diff = diff.abs()
@@ -76,7 +75,7 @@ class ScaleInvariantError(nn.Module):
         loss = torch.mean(d * d) - self.lamada * torch.mean(d) * torch.mean(d)
         return loss
 
-class probabilisticOrdLoss(nn.SmoothL1Loss):
+class probabilisticOrdLoss(berHuLoss):
     def __init__(self,args):
         super(probabilisticOrdLoss, self).__init__()
         self.loss = 0.0
@@ -90,17 +89,26 @@ class probabilisticOrdLoss(nn.SmoothL1Loss):
         """
         N, C, H, W = ord_labels.size()
         ord_num = C
+        ord_labels = ord_labels.view(-1,C,H*W)
+        target = target.view(-1,1,H*W)
+        valid_mask = target > 0
+        valid_mask = valid_mask.repeat(1,C,1) # Repeat the mask along C dimension
         if torch.cuda.is_available() and self.args.gpu:
-            K = torch.zeros((N, C, H, W), dtype=torch.int).cuda()
+            K = torch.zeros((N, C, H*W), dtype=torch.int).cuda()
             for i in range(ord_num):
-                if i <=  target:
-                    K[:, i, :, :] = K[:, i, :, :] + torch.ones((N, H, W), dtype=torch.int).cuda()
+                K[:,i,:] += i*torch.ones((N,H*W), dtype=torch.int).cuda()
+            mask_1 = (K < target).detach()
+            target = torch.zeros((N,C,H*W)).cuda()
+            target[mask_1] = 1
+            valid_mask = valid_mask.detach()
         else:
-            K = torch.zeros((N, C, H, W), dtype=torch.int)
+            K = torch.zeros((N, C, H * W), dtype=torch.int)
             for i in range(ord_num):
-                if i <= target:
-                    K[:, i, :, :] = K[:, i, :, :] + i * torch.ones((N, H, W), dtype=torch.int)
-        return super().forward(ord_labels,K)
+                K[:, i, :] += i * torch.ones((N, H * W), dtype=torch.int)
+            mask_1 = (K < target)
+            target = torch.zeros((N, C, H * W))
+            target[mask_1] = 1
+        return super().forward(ord_labels,target,valid_mask=valid_mask)
 
 class ordLoss(nn.Module):
     """
