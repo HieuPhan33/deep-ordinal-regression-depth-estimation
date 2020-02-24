@@ -231,8 +231,8 @@ def train(train_loader, model, criterion, optimizer, epoch, logger):
 
         with torch.autograd.detect_anomaly():
             pred_d, pred_ord = model(input)  # @wx 注意输出
-            target_c = utils.get_labels_sid(args, target)  # using sid, discretize the groundtruth
-            loss = criterion(pred_ord, target_c)
+            target_c,valid_mask = utils.get_labels_sid(args, target)  # using sid, discretize the groundtruth
+            loss = criterion(pred_ord, target_c,valid_mask)
             optimizer.zero_grad()
             loss.backward()  # compute gradient and do SGD step
             optimizer.step()

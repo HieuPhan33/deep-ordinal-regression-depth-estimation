@@ -64,7 +64,7 @@ def get_depth_sid(args, labels):
         min = 0.001
         max = 80.0
         K = 71.0
-    elif args.dataset == 'nyu':
+    elif 'nyu' in args.dataset:
         min = 0.02
         max = 10.0
         K = 68.0
@@ -96,7 +96,7 @@ def get_labels_sid(args, depth):
         alpha = 0.001
         beta = 80.0
         K = 71.0
-    elif args.dataset == 'nyu':
+    elif 'nyu' in args.dataset:
         alpha = 0.02
         beta = 10.0
         K = 68.0
@@ -120,7 +120,8 @@ def get_labels_sid(args, depth):
     # if torch.cuda.is_available() and args.gpu:
     #     labels = labels.cuda()
     # return labels.int()
-    return labels.int()
+    valid_mask = depth > 0
+    return labels.int(), valid_mask
 
 
 # save checkpoint

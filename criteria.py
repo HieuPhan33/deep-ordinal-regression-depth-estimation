@@ -88,7 +88,7 @@ class ordLoss(nn.Module):
         self.loss = 0.0
         self.args = args
 
-    def forward(self, ord_labels, target):
+    def forward(self, ord_labels, target, valid_mask):
         """
         :param ord_labels: ordinal labels for each position of Image I.
         :param target:     the ground_truth discreted using SID strategy.
@@ -136,15 +136,15 @@ class ordLoss(nn.Module):
             for i in range(ord_num):
                 K[:, i, :, :] = K[:, i, :, :] + i * torch.ones((N, H, W), dtype=torch.int)
 
-        mask_0 = (K <= target).detach() # Mask all pixel < rank K as 0
-        mask_1 = (K > target).detach()
+        valid_mask = valid_mask.repeat(1,C,1,1)
+        mask_0 = (K <= target).detach() & valid_mask # Mask all pixel < rank K as 0
+        mask_1 = (K > target).detach() & valid_mask
 
-        one = torch.ones(ord_labels[mask_1].size())
+        one = torch.ones(ord_labels[mask_1 & valid_mask].size())
         if torch.cuda.is_available() and self.args.gpu:
             one = one.cuda()
             # mask_0 = mask_0.detach()
             # mask_1 = mask_1.detach()
-
         self.loss += torch.sum(torch.log(torch.clamp(ord_labels[mask_0], min=1e-8, max=1e8))) \
                      + torch.sum(torch.log(torch.clamp(one - ord_labels[mask_1], min=1e-8, max=1e8)))
 
