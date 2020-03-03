@@ -222,21 +222,22 @@ class OrdinalRegressionLayer(nn.Module):
         ord_c1 = ord_c[:, 1, :].clone() # Response corresponding to 1
         ord_c1 = ord_c1.view(-1, ord_num, H, W)
         # print('ord > 0.5 size:', (ord_c1 > 0.5).size())
-        # decode_c = torch.sum((ord_c1 > 0.5), dim=1).view(-1, 1, H, W) # The one-label pixel corresponds to one rank
-        # decode_c = torch.sum(ord_c1, dim=1).view(-1, 1, H, W)
+
+        # Original summing for rank
+        decode_c = torch.sum((ord_c1 > 0.5), dim=1).view(-1, 1, H, W) # The one-label pixel corresponds to one rank
 
         # Create new temp matrix to compute probability corresponding to each rank r:
         # Pr(k=r) = Pr(k>r-1) - Pr(k>r) and Pr(k=0) = 1-Pr(k>0) and Pr(k=K) = Pr(k>K-1)
-        temp = torch.zeros((N, ord_num+ 2, H, W))
-        temp[:, 0, :, :] = torch.ones((N, H, W))
-        temp[:, 1:ord_num + 1, :, :] = ord_c1
-        prob = torch.zeros((N,ord_num+1,H,W))
-        for i in range(ord_num+1):
-            prob[:,i,:,:] = temp[:,i+1,:,:] - temp[:,i,:,:]
-        decode_c = torch.argmax(prob,dim=1).view(-1,1,H,W) # Matching the shape of the target -> N x 1 x H x W
-        # Derive rank based on probabilistic
-        if torch.cuda.is_available():
-            decode_c = decode_c.cuda()
+        # temp = torch.zeros((N, ord_num+ 2, H, W))
+        # temp[:, 0, :, :] = torch.ones((N, H, W))
+        # temp[:, 1:ord_num + 1, :, :] = ord_c1
+        # prob = torch.zeros((N,ord_num+1,H,W))
+        # for i in range(ord_num+1):
+        #     prob[:,i,:,:] = temp[:,i+1,:,:] - temp[:,i,:,:]
+        # decode_c = torch.argmax(prob,dim=1).view(-1,1,H,W) # Matching the shape of the target -> N x 1 x H x W
+        # # Derive rank based on probabilistic
+        # if torch.cuda.is_available():
+        #     decode_c = decode_c.cuda()
 
         return decode_c, ord_c1
 
