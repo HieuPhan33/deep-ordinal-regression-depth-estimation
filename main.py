@@ -235,7 +235,7 @@ def train(train_loader, model, criterion, optimizer, epoch, logger):
             pred_d, pred_ord, pred_regression = model(input)  # @wx 注意输出
             target_c = utils.get_labels_sid(args, target)  # using sid, discretize the groundtruth
             #loss = criterion(pred_ord, target_c)
-            loss = criterion(pred_ord, target_c, pred_regression, target) # multitask
+            loss,ord_loss,r_loss = criterion(pred_ord, target_c, pred_regression, target) # multitask
             optimizer.zero_grad()
             loss.backward()  # compute gradient and do SGD step
             optimizer.step()
@@ -244,6 +244,7 @@ def train(train_loader, model, criterion, optimizer, epoch, logger):
             torch.cuda.synchronize()
         gpu_time = time.time() - end
 
+        ord_loss, r_loss = ord_loss.item(), r_loss.item()
         # measure accuracy and record loss
         result = Result()
         depth = utils.get_depth_sid(args, pred_d)
@@ -257,6 +258,8 @@ def train(train_loader, model, criterion, optimizer, epoch, logger):
                   't_Data={data_time:.3f}({average.data_time:.3f}) '
                   't_GPU={gpu_time:.3f}({average.gpu_time:.3f})\n\t'
                   'Loss={Loss:.5f} '
+                  'Ord_loss={ord_loss:.5f} '
+                  'R_loss={r_loss:.5f} '
                   'RMSE={result.rmse:.2f}({average.rmse:.2f}) '
                   'RML={result.absrel:.2f}({average.absrel:.2f}) '
                   'Log10={result.lg10:.3f}({average.lg10:.3f}) '
@@ -264,7 +267,7 @@ def train(train_loader, model, criterion, optimizer, epoch, logger):
                   'Delta2={result.delta2:.3f}({average.delta2:.3f}) '
                   'Delta3={result.delta3:.3f}({average.delta3:.3f})'.format(
                 epoch, i + 1, len(train_loader), data_time=data_time,
-                gpu_time=gpu_time, Loss=loss.item(), result=result, average=average_meter.average()))
+                gpu_time=gpu_time, Loss=loss.item(),ord_loss=ord_loss,r_loss=r_loss, result=result, average=average_meter.average()))
             current_step = epoch * batch_num + i
             logger.add_scalar('Train/RMSE', result.rmse, current_step)
             logger.add_scalar('Train/rml', result.absrel, current_step)
@@ -272,6 +275,9 @@ def train(train_loader, model, criterion, optimizer, epoch, logger):
             logger.add_scalar('Train/Delta1', result.delta1, current_step)
             logger.add_scalar('Train/Delta2', result.delta2, current_step)
             logger.add_scalar('Train/Delta3', result.delta3, current_step)
+            logger.add_scalar('Train/Loss',loss.item(),current_step)
+            logger.add_scalar('Train/ord_loss',ord_loss,current_step)
+            logger.add_scalar('Train/r_loss',r_loss,current_step)
 
     avg = average_meter.average()
 

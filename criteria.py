@@ -86,7 +86,7 @@ class multitaskLoss(nn.Module):
     def forward(self,ord_labels,target_ord,r_pred,r_target):
         ord_loss = self.ord_loss(ord_labels,target_ord)
         r_loss = self.r_loss(r_pred,r_target)
-        return self.ord_scale * ord_loss + self.r_scale * r_loss
+        return self.ord_scale * ord_loss + self.r_scale * r_loss, ord_loss, r_loss
 
 class probabilisticOrdLoss(berHuLoss):
     def __init__(self,args):

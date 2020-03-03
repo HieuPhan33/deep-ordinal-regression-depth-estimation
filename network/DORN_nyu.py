@@ -258,7 +258,7 @@ class DORN(nn.Module):
 
         # Multi-task predictor
         #total_K = (total_ord_label-1)*2
-        total_K = total_ord_label # For original summing
+        total_K = total_ord_label*2 # For original summing
         self.ordinal_regressor = nn.Sequential(
             nn.Dropout2d(p=0.5),
             nn.Conv2d(512 * 5, 512, 1),
