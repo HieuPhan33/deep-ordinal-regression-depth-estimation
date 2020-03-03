@@ -71,7 +71,7 @@ def get_depth_sid(args, labels):
     elif args.dataset == 'uow_dataset':
         min = 0.001
         max = 156
-        K = 68.0
+        K = 90.0
     else:
         print('No Dataset named as ', args.dataset)
 
@@ -103,7 +103,7 @@ def get_labels_sid(args, depth):
     elif args.dataset == 'uow_dataset':
         alpha = 0.001
         beta = 156
-        K = 68.0
+        K = 90.0
     else: # 0.1 0.9   -> 0 1    => 2k = 0.1 -> -0.1
         print('No Dataset named as ', args.dataset)
 

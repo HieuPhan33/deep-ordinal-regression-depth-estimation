@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 import math
 from torchvision import models
+import torch.nn.functional as F
 
 from network.backbone import resnet101,resnet18
 
@@ -115,14 +116,92 @@ class FullImageEncoder(nn.Module):
         out = self.upsample(x5) # Copy
         return out
 
+class ChannelwiseLocalAttention(nn.Module):
+    def __init__(self, h_size = 0, pooling_output_size=(4, 4),n_heads=1):
+        super(ChannelwiseLocalAttention, self).__init__()
+        self.pooling_output_size = pooling_output_size
+        self.n_heads = n_heads
+        # self.pool = nn.AvgPool2d(kernel_size=kernel_size, stride=kernel_size)
+        #self.pool = nn.AdaptiveAvgPool2d(output_size=pooling_output_size)
+        in_channels = pooling_output_size[0] * pooling_output_size[1]
+        if h_size == 0:
+            h_size = in_channels
+        if h_size == 0:
+            self.h_size = in_channels
+        self.h_size = h_size
+        assert(in_channels % n_heads == 0, "n_heads must be divisible by in_channels")
+        out_channels = self.h_size * self.n_heads
+        # Each conv_matrix having shape of 1 x 1 x (H*W) x (H*W/r)
+        # They will be convolved on channel-wise matrix of shape (H*W) * C
+        self.conv_Q = nn.Conv1d(in_channels=in_channels, out_channels=out_channels, groups=n_heads, kernel_size=1)
+        self.conv_K = nn.Conv1d(in_channels=in_channels, out_channels=out_channels, groups=n_heads, kernel_size=1)
+        self.conv_V = nn.Conv1d(in_channels=in_channels, out_channels=in_channels*n_heads, groups=n_heads, kernel_size=1)
+        self.conv_combine = nn.Conv1d(in_channels=in_channels*n_heads,out_channels=in_channels,kernel_size=1)
+        # self.dropout1 = torch.nn.Dropout(p=0.5)
+        # self.dropout2 = torch.nn.Dropout(p=0.5)
+        # self.dropout3 = torch.nn.Dropout(p=0.5)
+        self.dropout = torch.nn.Dropout(p=0.5)
+
+    def forward(self, x):
+        # Derive parameters for pooling
+        N, C, H_in, W_in = x.size()
+        H_out, W_out = self.pooling_output_size
+        kernel = s = H_in // H_out, W_in // W_out
+        #padding = (H_out*s[0] - H_in) // 2, (W_out*s[1] - W_in)
+        padding = (s[0] - 2)*H_out // 2, (s[1] - 2)*W_out // 2
+        x_avg = F.avg_pool2d(x,kernel_size=kernel, stride=s, padding=padding)
+
+        #x_avg = self.pool(x)
+        N, C, H, W = x_avg.size()
+        x_avg = x_avg.view(N, C, H * W)
+        x_avg = x_avg.transpose(1, 2)  # Reshape to channel-wise vector at each x_avg[0,0,:]
+        Q = self.conv_Q(x_avg)  # N x (H/r*W/r) x c*n_heads
+        Q = Q.transpose(1,2).view(-1,C,self.n_heads,self.h_size) # Shape: N x C x n_head x h_size
+        #Q = self.dropout1(Q)
+        K = self.conv_K(x_avg)  # N x (H/r*W/r) x c
+        K = K.transpose(1,2).view(-1, C, self.n_heads, self.h_size)
+        #K = self.dropout2(K)
+        # V = x_avg
+        V = self.conv_V(x_avg) # The estimated scale that we should apply to each local neighborhood
+        V = V.transpose(1,2).view(-1, C, self.n_heads, H * W)
+
+        #score = torch.matmul(Q.transpose(1, 2), K)
+        score = torch.einsum('...xhd,...yhd->...hxy',Q,K)
+        score = F.softmax(score, dim=-1)
+        #att_weights = torch.matmul(score, V.transpose(1, 2))  # att_weights = (C x C) x (C x (H*W)) = C x (H*W)
+        weights = torch.einsum('...hcc,...chd->...hcd',score,V) # Shape: n_heads x C x (H*W)
+        weights = weights.transpose(1,2).view(-1,C,self.n_heads*H*W)
+        att_weights = self.conv_combine(weights.transpose(1,2))
+        att_weights = self.dropout(att_weights)
+        # => Re-balance the scale for each channel based on their importance relative to other channels
+
+        # Repeat the attention weights by the stride of pooling layer
+        # to transform weight_mask matching the shape of original input
+        h_scale, w_scale = x.size(2) // self.pooling_output_size[0], x.size(3) // self.pooling_output_size[1]
+        att_weights = att_weights.view(N,C,H,W)
+        att_weights = F.interpolate(att_weights,scale_factor=(h_scale,w_scale),mode='nearest')
+        # att_weights = att_weights.view(N, C, H * W, 1)
+        # att_weights = att_weights.repeat(1, 1, 1, w_scale)
+        # att_weights = att_weights.view(N, C, H, W * w_scale)
+        # att_weights = att_weights.repeat(1, 1, 1, h_scale)
+        # att_weights = att_weights.view(N, C, H * h_scale, W * w_scale)
+
+        if att_weights.size() != x.size():
+            att_weights = F.interpolate(att_weights, size=list(x.shape[2:]), mode='nearest')
+        assert att_weights.size() == x.size()
+
+        # Re-weight original input by weight mask
+        return att_weights * x
 
 class SceneUnderstandingModule(nn.Module):
     def __init__(self):
         super(SceneUnderstandingModule, self).__init__()
         total_ord_label = 68 # For NYU
+        #total_ord_label = 90 # For uow
         self.channels = 512
         self.encoder = FullImageEncoder(self.channels)
-        total_K = (total_ord_label-1)*2
+        #total_K = (total_ord_label-1)*2 For probabilistic inference
+        total_K = total_ord_label*2
         self.aspp1 = nn.Sequential(
             nn.Conv2d(self.channels, 512, 1),
             nn.ReLU(inplace=True),
@@ -151,15 +230,29 @@ class SceneUnderstandingModule(nn.Module):
             nn.ReLU(inplace=True),
             nn.UpsamplingBilinear2d(size=(33, 45))
         )
+        # self.concat_process = nn.Sequential(
+        #     nn.Dropout2d(p=0.5),
+        #     nn.Conv2d(512 * 5, self.channels, 1),
+        #     nn.ReLU(inplace=True),
+        #     nn.Dropout2d(p=0.5),
+        #     nn.Conv2d(self.channels, total_K, 1),  # Number of labels : KITTI 71 NYU 68
+        #     # nn.UpsamplingBilinear2d(scale_factor=8)
+        #     nn.UpsamplingBilinear2d(size=(257, 353)),
+        #     nn.Conv2d(total_K,total_K, 1)
+        # )
         self.concat_process = nn.Sequential(
             nn.Dropout2d(p=0.5),
-            nn.Conv2d(512 * 5, self.channels, 1),
+            ChannelwiseLocalAttention(pooling_output_size=(16,22),n_heads=4),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(512*5,self.channels,1),
             nn.ReLU(inplace=True),
             nn.Dropout2d(p=0.5),
-            nn.Conv2d(self.channels, total_K, 1),  # Number of labels : KITTI 71 NYU 68
-            # nn.UpsamplingBilinear2d(scale_factor=8)
-            nn.UpsamplingBilinear2d(size=(257, 353)),
-            nn.Conv2d(total_K,total_K, 1)
+            nn.UpsamplingBilinear2d(scale_factor=2),
+            nn.Conv2d(self.channels,total_K,1),
+            nn.ReLU(inplace=True),
+            nn.UpsamplingBilinear2d(size=(257,353)),
+            #nn.Conv2d(total_K, total_K,1),
+            #nn.ReLU(inplace=True)
         )
 
         weights_init(self.modules(), type='xavier')
