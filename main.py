@@ -69,7 +69,7 @@ def create_loader(args):
         # Data loading code
         print("=> creating data loaders...")
         #data_dir = '..'
-        data_dir = '/media/vasp/Data2/Users/vmhp806/depth-estimation'
+        data_dir = '/media/vasp/Data1/Users/vmhp806'
         valdir = os.path.join(data_dir, 'data', args.dataset, 'val')
         traindir = os.path.join(data_dir, 'data', args.dataset, 'train')
 
@@ -143,7 +143,8 @@ def main():
 
     # loss function
     #criterion = criteria.ordLoss(args)
-    criterion = criteria.probabilisticOrdLoss(args)
+    #criterion = criteria.probabilisticOrdLoss(args)
+    criterion = criteria.multitaskLoss(args)
 
     # create directory path
     output_directory = utils.get_output_directory(args)
@@ -231,9 +232,10 @@ def train(train_loader, model, criterion, optimizer, epoch, logger):
         end = time.time()
 
         with torch.autograd.detect_anomaly():
-            pred_d, pred_ord = model(input)  # @wx 注意输出
+            pred_d, pred_ord, pred_regression = model(input)  # @wx 注意输出
             target_c = utils.get_labels_sid(args, target)  # using sid, discretize the groundtruth
-            loss = criterion(pred_ord, target_c)
+            #loss = criterion(pred_ord, target_c)
+            loss = criterion(pred_ord, target_c, pred_regression, target) # multitask
             optimizer.zero_grad()
             loss.backward()  # compute gradient and do SGD step
             optimizer.step()
@@ -294,7 +296,7 @@ def validate(val_loader, model, epoch, logger):
         # compute output
         end = time.time()
         with torch.no_grad():
-            pred, _ = model(input)
+            pred, _, _ = model(input)
         if args.gpu:
             torch.cuda.synchronize()
         gpu_time = time.time() - end

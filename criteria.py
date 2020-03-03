@@ -75,6 +75,19 @@ class ScaleInvariantError(nn.Module):
         loss = torch.mean(d * d) - self.lamada * torch.mean(d) * torch.mean(d)
         return loss
 
+class multitaskLoss(nn.Module):
+    def __init__(self,args):
+        super(multitaskLoss, self).__init__()
+        self.args = args
+        self.ord_loss = ordLoss(args)
+        self.r_loss = MaskedL1Loss()
+        self.r_scale = 0.4
+        self.ord_scale = 0.6
+    def forward(self,ord_labels,target_ord,r_pred,r_target):
+        ord_loss = self.ord_loss(ord_labels,target_ord)
+        r_loss = self.r_loss(r_pred,r_target)
+        return self.ord_scale * ord_loss + self.r_scale * r_loss
+
 class probabilisticOrdLoss(berHuLoss):
     def __init__(self,args):
         super(probabilisticOrdLoss, self).__init__()

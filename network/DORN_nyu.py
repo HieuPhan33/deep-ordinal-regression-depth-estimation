@@ -115,7 +115,6 @@ class FullImageEncoder(nn.Module):
         out = self.upsample(x5) # Copy
         return out
 
-
 class SceneUnderstandingModule(nn.Module):
     def __init__(self):
         super(SceneUnderstandingModule, self).__init__()
@@ -151,16 +150,16 @@ class SceneUnderstandingModule(nn.Module):
             nn.ReLU(inplace=True),
             nn.UpsamplingBilinear2d(size=(33, 45))
         )
-        self.concat_process = nn.Sequential(
-            nn.Dropout2d(p=0.5),
-            nn.Conv2d(512 * 5, self.channels, 1),
-            nn.ReLU(inplace=True),
-            nn.Dropout2d(p=0.5),
-            nn.Conv2d(self.channels, total_K, 1),  # Number of labels : KITTI 71 NYU 68
-            # nn.UpsamplingBilinear2d(scale_factor=8)
-            nn.UpsamplingBilinear2d(size=(257, 353)),
-            nn.Conv2d(total_K,total_K, 1)
-        )
+        # self.concat_process = nn.Sequential(
+        #     nn.Dropout2d(p=0.5),
+        #     nn.Conv2d(512 * 5, self.channels, 1),
+        #     nn.ReLU(inplace=True),
+        #     nn.Dropout2d(p=0.5),
+        #     nn.Conv2d(self.channels, total_K, 1),  # Number of labels : KITTI 71 NYU 68
+        #     # nn.UpsamplingBilinear2d(scale_factor=8)
+        #     nn.UpsamplingBilinear2d(size=(257, 353)),
+        #     nn.Conv2d(total_K,total_K, 1)
+        # )
 
         weights_init(self.modules(), type='xavier')
 
@@ -174,9 +173,23 @@ class SceneUnderstandingModule(nn.Module):
 
         x6 = torch.cat((x1, x2, x3, x4, x5), dim=1)
         # print('cat x6 size:', x6.size())
-        out = self.concat_process(x6)
+        #out = self.concat_process(x6)
+        out = x6
         return out
 
+
+def upconv(in_channels, out_channels, kernel_size=5, output_size=None):
+    # Unpool then conv maintaining resolution
+
+    modules = [
+        nn.UpsamplingBilinear2d(scale_factor=2),
+        nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=1, padding=2, bias=False),
+        nn.BatchNorm2d(out_channels),
+        nn.ReLU(),
+    ]
+    if output_size:
+        modules.append(nn.UpsamplingNearest2d(size=output_size))
+    return nn.Sequential(*modules)
 
 class OrdinalRegressionLayer(nn.Module):
     def __init__(self):
@@ -229,7 +242,7 @@ class OrdinalRegressionLayer(nn.Module):
 
 
 class DORN(nn.Module):
-    def __init__(self, output_size=(257, 353), channel=3, pretrained=True, freeze=True):
+    def __init__(self, output_size=(257, 353), channel=3, total_ord_label=68, pretrained=True, freeze=True):
         super(DORN, self).__init__()
 
         self.output_size = output_size
@@ -240,15 +253,51 @@ class DORN(nn.Module):
         model = models.resnet18(pretrained=True)
         self.feature_extractor = torch.nn.Sequential(*(list(model.children())[:-2]))
         self.aspp_module = SceneUnderstandingModule()
+
+
+        # Multi-task predictor
+        #total_K = (total_ord_label-1)*2
+        total_K = total_ord_label # For original summing
+        self.ordinal_regressor = nn.Sequential(
+            nn.Dropout2d(p=0.5),
+            nn.Conv2d(512 * 5, 512, 1),
+            nn.ReLU(inplace=True),
+            nn.Dropout2d(p=0.5),
+            nn.Conv2d(512, total_K, 1),  # Number of labels : KITTI 71 NYU 68
+            # nn.UpsamplingBilinear2d(scale_factor=8)
+            nn.UpsamplingBilinear2d(size=(257, 353)),
+            nn.Conv2d(total_K,total_K, 1),
+            nn.ReLU()
+        )
+        self.regressor = nn.Sequential(
+            nn.Dropout2d(p=0.5),
+            nn.Conv2d(512 * 5, 512, 1),
+            nn.ReLU(inplace=True),
+            nn.Dropout2d(p=0.5),
+            upconv(512,256),
+            nn.Dropout2d(p=0.5),
+            upconv(256,128),
+            nn.Dropout2d(p=0.5),
+            upconv(128,64),
+            nn.Dropout2d(p=0.5),
+            upconv(64,32),
+            nn.Dropout2d(p=0.5),
+            nn.UpsamplingBilinear2d(size=(257, 353)),
+            nn.Conv2d(32,1, 1),
+            nn.ReLU(inplace=True)
+        )
         self.orl = OrdinalRegressionLayer()
 
     def forward(self, x):
         x1 = self.feature_extractor(x)
         # print(x1.size())
         x2 = self.aspp_module(x1)
+        or_output = self.ordinal_regressor(x2)
+        r_output = self.regressor(x2)
         # print('DORN x2 size:', x2.size())
-        depth_labels, ord_labels = self.orl(x2)
-        return depth_labels, ord_labels
+        depth_labels, ord_labels = self.orl(or_output)
+
+        return depth_labels, ord_labels, r_output
 
     def get_1x_lr_params(self):
         b = [self.feature_extractor]
