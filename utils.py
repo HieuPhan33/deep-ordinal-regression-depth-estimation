@@ -119,7 +119,8 @@ def get_labels_sid(args, depth):
     # if torch.cuda.is_available() and args.gpu:
     #     labels = labels.cuda()
     # return labels.int()
-    return labels.int()
+    valid_mask = depth > 0
+    return labels.int(), valid_mask
 
 
 # save checkpoint

@@ -75,41 +75,58 @@ class ScaleInvariantError(nn.Module):
         loss = torch.mean(d * d) - self.lamada * torch.mean(d) * torch.mean(d)
         return loss
 
-class probabilisticOrdLoss(berHuLoss):
-    def __init__(self,args):
-        super(probabilisticOrdLoss, self).__init__()
-        self.loss = 0.0
-        self.args = args
+# Compute loss on final probability
+class probabilisticOrdLoss(nn.CrossEntropyLoss):
+    def __init__(self):
+        super(probabilisticOrdLoss,self).__init__()
+        #self.super_class = nn.CrossEntropyLoss()
 
-    def forward(self,ord_labels,target):
+    def forward(self,y_pred,y_true,valid_mask):
         """
-        :param ord_labels: ordinal labels for each position of Image I.
-        :param target:     the ground_truth discreted using SID strategy.
-        :return: ordinal loss
+        y_pred: Probability feature map of size N x K x H x W
         """
-        N, C, H, W = ord_labels.size()
-        ord_num = C
-        ord_labels = ord_labels.view(-1,C,H*W)
-        target = target.view(-1,1,H*W)
-        valid_mask = target > 0
-        valid_mask = valid_mask.repeat(1,C,1) # Repeat the mask along C dimension
-        if torch.cuda.is_available() and self.args.gpu:
-            K = torch.zeros((N, C, H*W), dtype=torch.int).cuda()
-            for i in range(ord_num):
-                K[:,i,:] += i*torch.ones((N,H*W), dtype=torch.int).cuda()
-            mask_1 = (K < target).detach()
-            target = torch.zeros((N,C,H*W)).cuda()
-            target[mask_1] = 1
-            valid_mask = valid_mask.detach()
-        else:
-            K = torch.zeros((N, C, H * W), dtype=torch.int)
-            for i in range(ord_num):
-                K[:, i, :] += i * torch.ones((N, H * W), dtype=torch.int)
-            mask_1 = (K < target)
-            target = torch.zeros((N, C, H * W))
-            target[mask_1] = 1
-        return super().forward(ord_labels,target,valid_mask=valid_mask)
+        y_true[~valid_mask] = -100 # Default ignore_index
+        y_true = y_true.view(-1,y_true.size(2),y_true.size(3)).long() # Resize to N x H x W
+        return super().forward(y_pred,y_true.long())
 
+
+# Compute loss on network output
+# class probabilisticOrdLoss(berHuLoss):
+#     def __init__(self,args):
+#         super(probabilisticOrdLoss, self).__init__()
+#         self.loss = 0.0
+#         self.args = args
+#
+#     def forward(self,ord_labels,target):
+#         """
+#         :param ord_labels: ordinal labels for each position of Image I.
+#         :param target:     the ground_truth discreted using SID strategy.
+#         :return: ordinal loss
+#         """
+#         N, C, H, W = ord_labels.size()
+#         ord_num = C
+#         ord_labels = ord_labels.view(-1,C,H*W)
+#         target = target.view(-1,1,H*W)
+#         valid_mask = target > 0
+#         valid_mask = valid_mask.repeat(1,C,1) # Repeat the mask along C dimension
+#         if torch.cuda.is_available() and self.args.gpu:
+#             K = torch.zeros((N, C, H*W), dtype=torch.int).cuda()
+#             for i in range(ord_num):
+#                 K[:,i,:] += i*torch.ones((N,H*W), dtype=torch.int).cuda()
+#             mask_1 = (K < target).detach()
+#             target = torch.zeros((N,C,H*W)).cuda()
+#             target[mask_1] = 1
+#             valid_mask = valid_mask.detach()
+#         else:
+#             K = torch.zeros((N, C, H * W), dtype=torch.int)
+#             for i in range(ord_num):
+#                 K[:, i, :] += i * torch.ones((N, H * W), dtype=torch.int)
+#             mask_1 = (K < target)
+#             target = torch.zeros((N, C, H * W))
+#             target[mask_1] = 1
+#         return super().forward(ord_labels,target,valid_mask=valid_mask)
+
+# Weighted loss
 class ordLoss(nn.Module):
     """
     Ordinal loss is defined as the average of pixelwise ordinal loss F(h, w, X, O)
@@ -120,9 +137,14 @@ class ordLoss(nn.Module):
         super(ordLoss, self).__init__()
         self.loss = 0.0
         self.args = args
+        if args.dataset == 'nyu':
+            total_K = 68
+        weights = torch.ones(total_K)
+        if args.gpu:
+            weights = weights.cuda()
+        self.weights = nn.Parameter(weights)
 
-
-    def forward(self, ord_labels, target):
+    def forward(self, ord_labels, target, valid_mask):
         """
         :param ord_labels: ordinal labels for each position of Image I.
         :param target:     the ground_truth discreted using SID strategy.
@@ -170,18 +192,40 @@ class ordLoss(nn.Module):
             for i in range(ord_num):
                 K[:, i, :, :] = K[:, i, :, :] + i * torch.ones((N, H, W), dtype=torch.int)
 
-        mask_0 = (K <= target).detach() # Mask all pixel < rank K as 0
-        mask_1 = (K > target).detach()
+        valid_mask = valid_mask.repeat(1,C,1,1)
+        mask_1 = (K <= target).detach() & valid_mask # Mask all pixel <= rank K as 1, we want its prob to be 1
+        mask_0 = (K > target).detach() & valid_mask
+        # mask_1 = (K < target).detach() & valid_mask # Mask all pixel < rank K as 0
+        # mask_0 = (K >= target).detach() & valid_mask
 
-        one = torch.ones(ord_labels[mask_1].size())
+        one = torch.ones(ord_labels.size())
         if torch.cuda.is_available() and self.args.gpu:
             one = one.cuda()
             # mask_0 = mask_0.detach()
             # mask_1 = mask_1.detach()
+        prob_1 = torch.log(torch.clamp(ord_labels,min=1e-8, max=1e8))
+        prob_0 = torch.log(torch.clamp(one - ord_labels,min=1e-8, max=1e8))
 
-        self.loss += torch.sum(torch.log(torch.clamp(ord_labels[mask_0], min=1e-8, max=1e8))) \
-                     + torch.sum(torch.log(torch.clamp(one - ord_labels[mask_1], min=1e-8, max=1e8)))
+        weighted_prob_0 = torch.einsum('k,nkhw->nkhw',self.weights**2,prob_0)
+        weighted_prob_1 = torch.einsum('k,nkhw->nkhw',self.weights**2,prob_1)
 
+        regularized = 1 - self.weights**2 # Encourage to maximize weights, otherwise it will assign loss_r = 0
+        regularized[regularized < 0] = 0 # When weights > 1, if both regularizer and loss_r penalizes the weights of ordinal regression => leading to underfit
+        # Compare with log sigma -> allow the model to gain reward when over-penalizing sigma => Underfitting
+
+
+        # Verifying
+        # one = torch.ones(ord_labels[mask_0].size())
+        # if torch.cuda.is_available() and self.args.gpu:
+        #     one = one.cuda()
+        #     # mask_0 = mask_0.detach()
+        #     # mask_1 = mask_1.detach()
+        # a = torch.sum(torch.log(torch.clamp(ord_labels[mask_1], min=1e-8, max=1e8))) \
+        #              + torch.sum(torch.log(torch.clamp(one - ord_labels[mask_0], min=1e-8, max=1e8)))
+        # b = torch.sum(weighted_prob_0[mask_0]) + torch.sum(weighted_prob_1[mask_1])
+        # print(a-b)
+        # assert(a == b)
+        self.loss += torch.sum(weighted_prob_0[mask_0]) + torch.sum(weighted_prob_1[mask_1]) - torch.sum(regularized)
         # del K
         # del one
         # del mask_0
@@ -190,3 +234,89 @@ class ordLoss(nn.Module):
         N = N * H * W
         self.loss /= (-N)  # negative
         return self.loss
+
+
+
+# class ordLoss(nn.Module):
+#     """
+#     Ordinal loss is defined as the average of pixelwise ordinal loss F(h, w, X, O)
+#     over the entire image domain:
+#     """
+#
+#     def __init__(self,args):
+#         super(ordLoss, self).__init__()
+#         self.loss = 0.0
+#         self.args = args
+#
+#
+#     def forward(self, ord_labels, target, valid_mask):
+#         """
+#         :param ord_labels: ordinal labels for each position of Image I.
+#         :param target:     the ground_truth discreted using SID strategy.
+#         :return: ordinal loss
+#         """
+#         # assert pred.dim() == target.dim()
+#         # invalid_mask = target < 0
+#         # target[invalid_mask] = 0
+#
+#         N, C, H, W = ord_labels.size()
+#         ord_num = C
+#         # print('ord_num = ', ord_num)
+#
+#         self.loss = 0.0
+#
+#         # for k in range(ord_num):
+#         #     '''
+#         #     p^k_(w, h) = e^y(w, h, 2k+1) / [e^(w, h, 2k) + e^(w, h, 2k+1)]
+#         #     '''
+#         #     p_k = ord_labels[:, k, :, :]
+#         #     p_k = p_k.view(N, 1, H, W)
+#         #
+#         #     '''
+#         #     对每个像素而言，
+#         #     如果k小于l(w, h), log(p_k)
+#         #     如果k大于l(w, h), log(1-p_k)
+#         #     希望分类正确的p_k越大越好
+#         #     '''
+#         #     mask_0 = (target >= k).detach()   # 分类正确
+#         #     mask_1 = (target < k).detach()  # 分类错误
+#         #
+#         #     one = torch.ones(p_k[mask_1].size())
+#         #     if torch.cuda.is_available():
+#         #         one = one.cuda()
+#         #     self.loss += torch.sum(torch.log(torch.clamp(p_k[mask_0], min = 1e-7, max = 1e7))) \
+#         #                  + torch.sum(torch.log(torch.clamp(one - p_k[mask_1], min = 1e-7, max = 1e7)))
+#
+#         # faster version
+#         if torch.cuda.is_available() and self.args.gpu:
+#             K = torch.zeros((N, C, H, W), dtype=torch.int).cuda()
+#             for i in range(ord_num):
+#                 K[:, i, :, :] = K[:, i, :, :] + i * torch.ones((N, H, W), dtype=torch.int).cuda()
+#         else:
+#             K = torch.zeros((N, C, H, W), dtype=torch.int)
+#             for i in range(ord_num):
+#                 K[:, i, :, :] = K[:, i, :, :] + i * torch.ones((N, H, W), dtype=torch.int)
+#
+#         valid_mask = valid_mask.repeat(1,C,1,1)
+#         mask_0 = (K <= target).detach() & valid_mask # Mask all pixel <= rank K as 0
+#         mask_1 = (K > target).detach() & valid_mask
+#         # mask_0 = (K < target).detach() & valid_mask # Mask all pixel < rank K as 0
+#         # mask_1 = (K >= target).detach() & valid_mask
+#
+#         one = torch.ones(ord_labels[mask_1 & valid_mask].size())
+#         if torch.cuda.is_available() and self.args.gpu:
+#             one = one.cuda()
+#             # mask_0 = mask_0.detach()
+#             # mask_1 = mask_1.detach()
+#
+#         self.loss += torch.sum(torch.log(torch.clamp(ord_labels[mask_0], min=1e-8, max=1e8))) \
+#                      + torch.sum(torch.log(torch.clamp(one - ord_labels[mask_1], min=1e-8, max=1e8)))
+#
+#         # del K
+#         # del one
+#         # del mask_0
+#         # del mask_1
+#
+#         N = N * H * W
+#         self.loss /= (-N)  # negative
+#         return self.loss

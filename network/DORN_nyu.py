@@ -122,7 +122,8 @@ class SceneUnderstandingModule(nn.Module):
         total_ord_label = 68 # For NYU
         self.channels = 512
         self.encoder = FullImageEncoder(self.channels)
-        total_K = (total_ord_label-1)*2
+        total_K = (total_ord_label)*2
+        #total_K = total_ord_label - 1
         self.aspp1 = nn.Sequential(
             nn.Conv2d(self.channels, 512, 1),
             nn.ReLU(inplace=True),
@@ -159,7 +160,9 @@ class SceneUnderstandingModule(nn.Module):
             nn.Conv2d(self.channels, total_K, 1),  # Number of labels : KITTI 71 NYU 68
             # nn.UpsamplingBilinear2d(scale_factor=8)
             nn.UpsamplingBilinear2d(size=(257, 353)),
-            nn.Conv2d(total_K,total_K, 1)
+            nn.Conv2d(total_K,total_K,1),
+            #nn.ReLU(inplace=True)
+            #nn.Sigmoid()
         )
 
         weights_init(self.modules(), type='xavier')
@@ -177,7 +180,42 @@ class SceneUnderstandingModule(nn.Module):
         out = self.concat_process(x6)
         return out
 
-
+# class OrdinalRegressionLayer(nn.Module):
+#     def __init__(self):
+#         super(OrdinalRegressionLayer, self).__init__()
+#
+#     def forward(self, x):
+#         """
+#         :param x: N x H x W x C, N is batch_size, C is channels of features
+#         :return: ord_labels is ordinal outputs for each spatial locations , size is N x H X W X C (C = 2K, K is interval of SID)
+#                  decode_label is the ordinal labels for each position of Image I
+#         """
+#         N, C, H, W = x.size()
+#
+#         """
+#         replace iter with matrix operation
+#         fast speed methods
+#         """
+#         # print('ord > 0.5 size:', (ord_c1 > 0.5).size())
+#         decode_c = torch.sum((x > 0.5), dim=1).view(-1, 1, H, W) + 1 # The one-label pixel corresponds to one rank
+#         #decode_c = torch.sum(ord_c1, dim=1).view(-1, 1, H, W)
+#
+#         # Create new temp matrix to compute probability corresponding to each rank r:
+#         # Pr(k=r) = Pr(k>r-1) - Pr(k>r) and Pr(k=0) = 1-Pr(k>0) and Pr(k=K) = Pr(k>K-1)
+#         # temp = torch.zeros((N, ord_num+ 2, H, W))
+#         # temp[:, 0, :, :] = torch.ones((N, H, W))
+#         # temp[:, 1:ord_num + 1, :, :] = ord_c1
+#         # prob = torch.zeros((N,ord_num+1,H,W))
+#         # for i in range(ord_num+1):
+#         #     prob[:,i,:,:] = temp[:,i+1,:,:] - temp[:,i,:,:]
+#         # decode_c = torch.argmax(prob,dim=1).view(-1,1,H,W) # Matching the shape of the target -> N x 1 x H x W
+#         # # Derive rank based on probabilistic
+#         # if torch.cuda.is_available():
+#         #     decode_c = decode_c.cuda()
+#         #     ord_c1 = prob.cuda()
+#
+#         return decode_c, x
+# Output K response
 class OrdinalRegressionLayer(nn.Module):
     def __init__(self):
         super(OrdinalRegressionLayer, self).__init__()
@@ -209,23 +247,75 @@ class OrdinalRegressionLayer(nn.Module):
         ord_c1 = ord_c[:, 1, :].clone() # Response corresponding to 1
         ord_c1 = ord_c1.view(-1, ord_num, H, W)
         # print('ord > 0.5 size:', (ord_c1 > 0.5).size())
-        # decode_c = torch.sum((ord_c1 > 0.5), dim=1).view(-1, 1, H, W) # The one-label pixel corresponds to one rank
-        # decode_c = torch.sum(ord_c1, dim=1).view(-1, 1, H, W)
+        decode_c = torch.sum((ord_c1 > 0.5), dim=1).view(-1, 1, H, W)  # The one-label pixel corresponds to one rank
+        #decode_c = torch.sum(ord_c1, dim=1).view(-1, 1, H, W)
 
         # Create new temp matrix to compute probability corresponding to each rank r:
         # Pr(k=r) = Pr(k>r-1) - Pr(k>r) and Pr(k=0) = 1-Pr(k>0) and Pr(k=K) = Pr(k>K-1)
-        temp = torch.zeros((N, ord_num+ 2, H, W))
-        temp[:, 0, :, :] = torch.ones((N, H, W))
-        temp[:, 1:ord_num + 1, :, :] = ord_c1
-        prob = torch.zeros((N,ord_num+1,H,W))
-        for i in range(ord_num+1):
-            prob[:,i,:,:] = temp[:,i+1,:,:] - temp[:,i,:,:]
-        decode_c = torch.argmax(prob,dim=1).view(-1,1,H,W) # Matching the shape of the target -> N x 1 x H x W
-        # Derive rank based on probabilistic
+        # temp = torch.zeros((N, ord_num+ 2, H, W))
+        # temp[:, 0, :, :] = torch.ones((N, H, W))
+        # temp[:, 1:ord_num + 1, :, :] = ord_c1
+        # prob = torch.zeros((N,ord_num+1,H,W))
+        # for i in range(ord_num+1):
+        #     prob[:,i,:,:] = temp[:,i+1,:,:] - temp[:,i,:,:]
+        # decode_c = torch.argmax(prob,dim=1).view(-1,1,H,W) # Matching the shape of the target -> N x 1 x H x W
+        # # Derive rank based on probabilistic
+        # if torch.cuda.is_available():
+        #     decode_c = decode_c.cuda()
+        #     ord_c1 = prob.cuda()
         if torch.cuda.is_available():
             decode_c = decode_c.cuda()
-
         return decode_c, ord_c1
+
+# class OrdinalRegressionLayer(nn.Module):
+#     def __init__(self):
+#         super(OrdinalRegressionLayer, self).__init__()
+#
+#     def forward(self, x):
+#         """
+#         :param x: N x H x W x C, N is batch_size, C is channels of features
+#         :return: ord_labels is ordinal outputs for each spatial locations , size is N x H X W X C (C = 2K, K is interval of SID)
+#                  decode_label is the ordinal labels for each position of Image I
+#         """
+#         N, C, H, W = x.size()
+#         ord_num = C // 2
+#
+#         """
+#         replace iter with matrix operation
+#         fast speed methods
+#         """
+#         A = x[:, ::2, :, :].clone() # Took every odd-th element
+#         B = x[:, 1::2, :, :].clone() # Took every even-th element
+#
+#         A = A.view(N, 1, ord_num * H * W) # Trick to combine, expand all pixels by pixels
+#         B = B.view(N, 1, ord_num * H * W)
+#
+#         C = torch.cat((A, B), dim=1) # Soft-max each binary response
+#         C = torch.clamp(C, min=1e-8, max=1e8)  # prevent nans
+#
+#         ord_c = nn.functional.softmax(C, dim=1)
+#
+#         ord_c1 = ord_c[:, 1, :].clone() # Response corresponding to 1
+#         ord_c1 = ord_c1.view(-1, ord_num, H, W)
+#         # print('ord > 0.5 size:', (ord_c1 > 0.5).size())
+#         # decode_c = torch.sum((ord_c1 > 0.5), dim=1).view(-1, 1, H, W) # The one-label pixel corresponds to one rank
+#         # decode_c = torch.sum(ord_c1, dim=1).view(-1, 1, H, W)
+#
+#         # Create new temp matrix to compute probability corresponding to each rank r:
+#         # Pr(k=r) = Pr(k>r-1) - Pr(k>r) and Pr(k=0) = 1-Pr(k>0) and Pr(k=K) = Pr(k>K-1)
+#         temp = torch.zeros((N, ord_num+ 2, H, W))
+#         temp[:, 0, :, :] = torch.ones((N, H, W))
+#         temp[:, 1:ord_num + 1, :, :] = ord_c1
+#         prob = torch.zeros((N,ord_num+1,H,W))
+#         for i in range(ord_num+1):
+#             prob[:,i,:,:] = temp[:,i+1,:,:] - temp[:,i,:,:]
+#         decode_c = torch.argmax(prob,dim=1).view(-1,1,H,W) # Matching the shape of the target -> N x 1 x H x W
+#         # Derive rank based on probabilistic
+#         if torch.cuda.is_available():
+#             decode_c = decode_c.cuda()
+#             ord_c1 = prob.cuda()
+#
+#         return decode_c, ord_c1
 
 
 class DORN(nn.Module):
@@ -264,7 +354,17 @@ class DORN(nn.Module):
                 if k.requires_grad:
                     yield k
 
-
+def multiclass_transform(g_prob):
+    N,ord_num,H,W = g_prob.size()
+    output = torch.zeros((N,ord_num+1,H,W))
+    for i in range(ord_num+1):
+        if i == 0:
+            output[:,0,:,:] = 1 - g_prob[:,0,:,:]
+        elif i == ord_num:
+            output[:,ord_num,:,:] = g_prob[:,ord_num,:,:]
+        else:
+            output[:,i,:,:] = g_prob[:,i-1,:,:] - g_prob[:,i,:,:]
+    return output
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1"  # 默认使用GPU 0
 
 if __name__ == "__main__":

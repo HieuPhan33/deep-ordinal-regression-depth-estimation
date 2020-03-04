@@ -69,7 +69,7 @@ def create_loader(args):
         # Data loading code
         print("=> creating data loaders...")
         #data_dir = '..'
-        data_dir = '/media/vasp/Data2/Users/vmhp806/depth-estimation'
+        data_dir = '/media/vasp/Data1/Users/vmhp806'
         valdir = os.path.join(data_dir, 'data', args.dataset, 'val')
         traindir = os.path.join(data_dir, 'data', args.dataset, 'train')
 
@@ -101,6 +101,8 @@ def main():
             print("Let's use GPU ", torch.cuda.current_device())
 
     train_loader, val_loader = create_loader(args)
+    # loss function
+    criterion = criteria.ordLoss(args)
 
     if args.resume:
         assert os.path.isfile(args.resume), \
@@ -129,7 +131,8 @@ def main():
 
         # different modules have different learning rate
         train_params = [{'params': model.get_1x_lr_params(), 'lr': args.lr},
-                        {'params': model.get_10x_lr_params(), 'lr': args.lr * 10}]
+                        {'params': model.get_10x_lr_params(), 'lr': args.lr * 10},
+                        {'params': criterion.parameters(), 'lr':args.lr}]
 
         optimizer = torch.optim.SGD(train_params, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
 
@@ -141,9 +144,8 @@ def main():
     scheduler = lr_scheduler.ReduceLROnPlateau(
         optimizer, 'min', patience=args.lr_patience)
 
-    # loss function
-    #criterion = criteria.ordLoss(args)
-    criterion = criteria.probabilisticOrdLoss(args)
+
+    #criterion = criteria.probabilisticOrdLoss()
 
     # create directory path
     output_directory = utils.get_output_directory(args)
@@ -232,8 +234,8 @@ def train(train_loader, model, criterion, optimizer, epoch, logger):
 
         with torch.autograd.detect_anomaly():
             pred_d, pred_ord = model(input)  # @wx 注意输出
-            target_c = utils.get_labels_sid(args, target)  # using sid, discretize the groundtruth
-            loss = criterion(pred_ord, target_c)
+            target_c, valid_mask = utils.get_labels_sid(args, target)  # using sid, discretize the groundtruth
+            loss = criterion(pred_ord, target_c, valid_mask)
             optimizer.zero_grad()
             loss.backward()  # compute gradient and do SGD step
             optimizer.step()
