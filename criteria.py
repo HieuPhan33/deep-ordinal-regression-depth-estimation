@@ -225,7 +225,7 @@ class ordLoss(nn.Module):
         # b = torch.sum(weighted_prob_0[mask_0]) + torch.sum(weighted_prob_1[mask_1])
         # print(a-b)
         # assert(a == b)
-        self.loss += torch.sum(weighted_prob_0[mask_0]) + torch.sum(weighted_prob_1[mask_1]) - torch.sum(regularized)
+        self.loss += torch.sum(weighted_prob_0[mask_0]) + torch.sum(weighted_prob_1[mask_1])
         # del K
         # del one
         # del mask_0
@@ -233,7 +233,7 @@ class ordLoss(nn.Module):
 
         N = N * H * W
         self.loss /= (-N)  # negative
-        return self.loss
+        return self.loss + torch.sum(regularized)
 
 
 
