@@ -139,7 +139,7 @@ class ordLoss(nn.Module):
         self.args = args
         if args.dataset == 'nyu':
             total_K = 68
-        weights = torch.ones(total_K)
+        weights = torch.zeros(total_K)
         if args.gpu:
             weights = weights.cuda()
         self.weights = nn.Parameter(weights)
@@ -206,11 +206,15 @@ class ordLoss(nn.Module):
         prob_1 = torch.log(torch.clamp(ord_labels,min=1e-8, max=1e8))
         prob_0 = torch.log(torch.clamp(one - ord_labels,min=1e-8, max=1e8))
 
-        weighted_prob_0 = torch.einsum('k,nkhw->nkhw',self.weights**2,prob_0)
-        weighted_prob_1 = torch.einsum('k,nkhw->nkhw',self.weights**2,prob_1)
+        # weighted_prob_0 = torch.einsum('k,nkhw->nkhw',self.weights**2,prob_0)
+        # weighted_prob_1 = torch.einsum('k,nkhw->nkhw',self.weights**2,prob_1)
+        weighted_prob_0 = torch.einsum('k,nkhw->nkhw',torch.exp(-self.weights),prob_0)
+        weighted_prob_1 = torch.einsum('k,nkhw->nkhw',torch.exp(-self.weights),prob_1)
 
-        regularized = 1 - self.weights**2 # Encourage to maximize weights, otherwise it will assign loss_r = 0
-        regularized[regularized < 0] = 0 # When weights > 1, if both regularizer and loss_r penalizes the weights of ordinal regression => leading to underfit
+        regularized = 1/2 * self.weights
+
+        #regularized = 1 - self.weights**2 # Encourage to maximize weights, otherwise it will assign loss_r = 0
+        #regularized[regularized < 0] = 0 # When weights > 1, if both regularizer and loss_r penalizes the weights of ordinal regression => leading to underfit
         # Compare with log sigma -> allow the model to gain reward when over-penalizing sigma => Underfitting
 
 
@@ -224,6 +228,7 @@ class ordLoss(nn.Module):
         #              + torch.sum(torch.log(torch.clamp(one - ord_labels[mask_0], min=1e-8, max=1e8)))
         # b = torch.sum(weighted_prob_0[mask_0]) + torch.sum(weighted_prob_1[mask_1])
         # print(a-b)
+        #print(torch.sum())
         # assert(a == b)
         self.loss += torch.sum(weighted_prob_0[mask_0]) + torch.sum(weighted_prob_1[mask_1])
         # del K
@@ -233,7 +238,7 @@ class ordLoss(nn.Module):
 
         N = N * H * W
         self.loss /= (-N)  # negative
-        return self.loss + torch.sum(regularized)
+        return self.loss + torch.mean(regularized)
 
 
 
