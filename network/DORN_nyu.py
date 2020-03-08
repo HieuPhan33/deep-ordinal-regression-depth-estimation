@@ -249,7 +249,7 @@ class SceneUnderstandingModule(nn.Module):
             nn.Dropout2d(p=0.5),
             nn.UpsamplingBilinear2d(scale_factor=2),
             nn.Conv2d(self.channels,total_K,1),
-            nn.ReLU(inplace=True),
+            #nn.ReLU(inplace=True),
             nn.UpsamplingBilinear2d(size=(257,353)),
             #nn.Conv2d(total_K, total_K,1),
             #nn.ReLU(inplace=True)
