@@ -9,6 +9,7 @@ import shutil
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
+import config
 
 cmap = plt.cm.jet
 
@@ -68,10 +69,10 @@ def get_depth_sid(args, labels):
         min = 0.02
         max = 10.0
         K = 68.0
-    elif args.dataset == 'uow_dataset':
+    elif 'uow_dataset' in args.dataset:
         min = 0.001
         max = 156
-        K = 90.0
+        K = config.K
     else:
         print('No Dataset named as ', args.dataset)
 
@@ -100,10 +101,10 @@ def get_labels_sid(args, depth):
         alpha = 0.02
         beta = 10.0
         K = 68.0
-    elif args.dataset == 'uow_dataset':
+    elif 'uow_dataset' in args.dataset:
         alpha = 0.001
         beta = 156
-        K = 90.0
+        K = config.K
     else: # 0.1 0.9   -> 0 1    => 2k = 0.1 -> -0.1
         print('No Dataset named as ', args.dataset)
 

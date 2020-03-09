@@ -27,6 +27,7 @@ class NYUDataset(MyDataloader):
 
         # perform 1st step of data augmentation
         transform = transforms.Compose([
+            transforms.Resize((iheight,iwidth)),
             transforms.Resize(288.0 / iheight),  # this is for computational efficiency, since rotation can be slow
             transforms.Rotate(angle),
             transforms.Resize(s),
@@ -43,6 +44,7 @@ class NYUDataset(MyDataloader):
     def val_transform(self, rgb, depth):
         depth_np = depth
         transform = transforms.Compose([
+            transforms.Resize((iheight, iwidth)),
             transforms.Resize(288.0 / iheight),
             transforms.CenterCrop(self.output_size),
         ])
