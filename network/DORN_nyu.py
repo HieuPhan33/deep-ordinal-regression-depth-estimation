@@ -91,9 +91,10 @@ class SceneUnderstandingModule(nn.Module):
         # )
         self.concat_process = nn.Sequential(
             nn.Dropout2d(p=0.5),
+            ChannelSpatialSELayer(num_channels=512*5,reduction_ratio=2),
             #ChannelwiseLocalAttention(pooling_output_size=(16,22),n_heads=4),
             #AugmentedConv(in_channels=512*5,out_channels=512*5,kernel_size=3, dk=40, dv=4, Nh=2, relative=False, stride=1),
-            #nn.ReLU(inplace=True),
+            nn.ReLU(inplace=True),
             #nn.Dropout2d(p=0.5),
             nn.Conv2d(512*5,self.channels,1),
             nn.ReLU(inplace=True),
