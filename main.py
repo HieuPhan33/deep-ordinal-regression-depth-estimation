@@ -69,7 +69,7 @@ def create_loader(args):
         #     exit(-1)
         # Data loading code
         print("=> creating data loaders...")
-        data_dir = r'Z:\10-Share\depth estimation'
+        data_dir = r'/media/vasp/Data1/Users/vmhp806'
         valdir = os.path.join(data_dir, 'data', args.dataset, 'val')
         traindir = os.path.join(data_dir, 'data', args.dataset, 'train')
 
@@ -132,6 +132,7 @@ def main():
                         {'params': model.get_10x_lr_params(), 'lr': args.lr * 10}]
 
         optimizer = torch.optim.SGD(train_params, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+        #optimizer = torch.optim.Adam(train_params, lr=args.lr)
 
         # You can use DataParallel() whether you use Multi-GPUs or not
         if args.gpu:
