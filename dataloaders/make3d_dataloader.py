@@ -9,34 +9,35 @@
 import os
 import numpy as np
 from PIL import Image
-
+from scipy import io
 from torch.utils.data import Dataset
-iheight, iwidth = 370, 1224  # raw image size
+iheight, iwidth = 2272,1704  # raw image size
+gt_height,gt_width = 55,305
 IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif']
 
 
 def pil_loader(path, rgb=True):
     # open path as file to avoid ResourceWarning (https://github.com/python-pillow/Pillow/issues/835)
-    with open(path, 'rb') as f:
-        img = Image.open(f)
-        if rgb:
-            return img.convert('RGB')
-        else:
-            return img.convert('I')
+    if rgb:
+        with open(path, 'rb') as f:
+            img = Image.open(path)
+    else:
+        img = io.loadmat(path)['Position3DGrid']
+        img = img[:,:,3]
+    return img
 
 
 def readPathFiles(file_path, root_dir):
     im_gt_paths = []
-
-    with open(file_path, 'r') as f:
-        lines = f.readlines()
-
-        for line in lines:
-            im_path = os.path.join(root_dir, line.split()[0])
-            gt_path = os.path.join(root_dir,'kitti', line.split()[1])
-
-            im_gt_paths.append((im_path, gt_path))
-
+    path = os.path.join(root_dir,file_path,'rgb')
+    img_files = os.listdir(path)
+    for img_file in img_files:
+        if img_file.endswith('.jpg'):
+            name = os.path.splitext(img_file)[0][4:]
+            img_file = os.path.join(root_dir,file_path,'rgb',img_file)
+            depth_file = 'depth_sph_corr-{}.mat'.format(name)
+            depth_file = os.path.join(root_dir,file_path,'depth',depth_file)
+            im_gt_paths.append((img_file,depth_file))
     return im_gt_paths
 
 
@@ -45,19 +46,10 @@ from dataloaders import transforms as my_transforms
 to_tensor = my_transforms.ToTensor()
 
 
-class KittiFolder(Dataset):
-    """
-        RGB:
-        kitti_raw_data/2011-xx-xx/2011_xx_xx_drive_xxxx_sync/image_02/data/xxxxxxxx01.png
-        Depth:
-        train: train_gt16bit/xxxxx.png
-        val: val_gt16bit/xxxxx.png
-        test: test_gt16bit/xxxxx.png
-    """
-
-    def __init__(self, root_dir='/home/data/UnsupervisedDepth/wangixn/KITTI',
-                 mode='train', loader=pil_loader, size=(385, 513)):
-        super(KittiFolder, self).__init__()
+class Make3DFolder(Dataset):
+    def __init__(self, root_dir='/data/make3d/train',
+                 mode='train', loader=pil_loader, size=(460, 345)):
+        super(Make3DFolder, self).__init__()
         self.root_dir = root_dir
 
         self.mode = mode
@@ -66,13 +58,10 @@ class KittiFolder(Dataset):
         self.size = size
 
         if self.mode == 'train':
-            self.im_gt_paths = readPathFiles('./tool/filenames/eigen_train_pairs.txt', root_dir)
+            self.im_gt_paths = readPathFiles('train', root_dir)
 
         elif self.mode == 'test':
-            self.im_gt_paths = readPathFiles('./tool/filenames/eigen_test_pairs.txt', root_dir)
-
-        elif self.mode == 'val':
-            self.im_gt_paths = readPathFiles('./tool/filenames/eigen_val_pairs.txt', root_dir)
+            self.im_gt_paths = readPathFiles('val', root_dir)
 
         else:
             print('no mode named as ', mode)
@@ -82,7 +71,7 @@ class KittiFolder(Dataset):
         return len(self.im_gt_paths)
 
     def train_transform(self, im, gt):
-        im = np.array(im).astype('uint8')
+        im = np.array(im)
         #im = np.transpose(im, (2,0,1))
         gt = np.array(gt).astype(np.float32)
 
@@ -91,20 +80,16 @@ class KittiFolder(Dataset):
         do_flip = np.random.uniform(0.0, 1.0) < 0.5  # random horizontal flip
         color_jitter = my_transforms.ColorJitter(0.4, 0.4, 0.4)
 
+
         transform = my_transforms.Compose([
-            # my_transforms.Resize((iheight, iwidth)),
-            # my_transforms.Resize(288.0 / iheight,interpolation='bilinear'),  # this is for computational efficiency, since rotation can be slow
-            # my_transforms.Rotate(angle),
-            # my_transforms.Resize(s),
-            # my_transforms.CenterCrop(self.size),
-            # my_transforms.HorizontalFlip(do_flip)
-            #my_transforms.Crop(130, 10, 240, 1200),
-            my_transforms.Resize(400 / iheight, interpolation='bilinear'),
+            my_transforms.Resize((736,512), interpolation='bilinear'),
             my_transforms.Rotate(angle),
             my_transforms.Resize(s),
             my_transforms.CenterCrop(self.size),
             my_transforms.HorizontalFlip(do_flip)
         ])
+
+
 
         im_ = transform(im)
         im_ = color_jitter(im_)
@@ -124,12 +109,14 @@ class KittiFolder(Dataset):
         return im_, gt_
 
     def val_transform(self, im, gt):
-        im = np.array(im).astype('uint8')
+        im = np.array(im)
+        im = im.astype('uint8')
+
         gt = np.array(gt).astype(np.float32)
 
         transform = my_transforms.Compose([
             #my_transforms.Crop(130, 10, 240, 1200),
-            my_transforms.Resize(460 / iheight, interpolation='bilinear'),
+            my_transforms.Resize((736,512), interpolation='bilinear'),
             my_transforms.CenterCrop(self.size)
         ])
 
@@ -161,7 +148,6 @@ class KittiFolder(Dataset):
 
         else:
             im, gt = self.val_transform(im, gt)
-
         return im, gt
 
 
@@ -169,31 +155,20 @@ import torch
 from tqdm import tqdm
 
 if __name__ == '__main__':
-    root_dir = '../data'
+    root_dir = '../data/make3d'
 
     # im_gt_paths = readPathFiles('./eigen_val_pairs.txt', root_dir)
 
-    data_set = KittiFolder(root_dir, mode='train', size=(385, 513))
-    data_loader = torch.utils.data.DataLoader(data_set, batch_size=1, shuffle=False, num_workers=0)
+    data_set = Make3DFolder(root_dir, mode='test', size=(460, 345))
+    data_loader = torch.utils.data.DataLoader(data_set, batch_size=4, shuffle=False, num_workers=0)
 
     print('dataset num is ', len(data_loader))
-
+    max_depth,min_depth = -1,10000
     for im, gt in tqdm(data_loader):
 
         # print(im)
 
         valid = (gt > 0.0)
-        print(torch.max(gt[valid]), torch.min(gt[valid]))
-        # print(gt.size())
-        print(im.size())
-        # print('im size:', im.size())
-        # print('gt size:', gt.size())
-
-        # print(gt)
-        # print(torch.max(gt))
-        # print(torch.min(gt))
-
-        # print(im)
-        #
-        # if i == 0:
-        #     break
+        max_depth = max(max_depth,torch.max(gt[valid]))
+        min_depth = min(min_depth,torch.min(gt[valid]))
+    print(min_depth,'-',max_depth)

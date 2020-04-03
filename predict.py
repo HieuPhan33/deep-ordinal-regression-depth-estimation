@@ -31,7 +31,7 @@ def val_transform(rgb, depth):
     depth_np = transform(depth_np)
 
     return rgb_np, depth_np
-def evaluate(input_files, model):
+def evaluate(input_files, model,result_dir):
     preds, targets, inputs = [0]*len(input_files),[0]*len(input_files),[0]*len(input_files)
     for i,input_file in enumerate(input_files):
         input,target = h5_loader(input_file)
@@ -77,20 +77,22 @@ def evaluate(input_files, model):
     rgb_merge = np.vstack(inputs)
     preds_merge = np.vstack(preds)
     targets_merge = np.vstack(targets)
-    utils.save_image(rgb_merge,'result/rgb.png')
-    utils.save_image(preds_merge,'result/preds.png')
-    utils.save_image(targets_merge,'result/targets.png')
+    utils.save_image(rgb_merge,os.path.join(result_dir,'rgb.png'))
+    utils.save_image(preds_merge,os.path.join(result_dir,'pred.png'))
+    utils.save_image(targets_merge,os.path.join(result_dir,'target.png'))
 
 def main():
-    data_dir = r'/media/vasp/Data1/Users/vmhp806/data'
+    data_dir = r'Z:\10-Share\depth estimation\data'
     dataset = 'uow_dataset_full'
-    input_files = ['1.h5','2.h5','3.h5']
-    input_files = [os.path.join(data_dir,dataset,'train/general',f) for f in input_files]
-    rsa = r'result/uow_dataset_full_old/sSE/model_best.pth.tar'
+    input_files = ['49.h5','60.h5','67.h5']
+    input_files = [os.path.join(data_dir,dataset,'val\general',f) for f in input_files]
+    result_dir = r'result\uow_dataset_full\run_3'
+    rsa = os.path.join(result_dir,'model_best.pth.tar')
     checkpoint = torch.load(rsa)
     model = checkpoint['model']
+    model.src_device_obj = torch.device('cuda:0')
     del checkpoint
-    evaluate(input_files,model)
+    evaluate(input_files,model,result_dir)
 
 if __name__ == '__main__':
     main()

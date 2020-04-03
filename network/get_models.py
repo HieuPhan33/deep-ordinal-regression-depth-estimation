@@ -10,9 +10,10 @@ from network import DORN_nyu, DORN_kitti
 
 def get_models(dataset='nyu', pretrained=True, freeze=True):
     if dataset == 'kitti':
-        return DORN_kitti.DORN(pretrained=pretrained, freeze=freeze)
+        rgb_size = (385, 513)
     else:
-        return DORN_nyu.DORN(pretrained=pretrained, freeze=freeze)
+        rgb_size = (257, 353)
+    return DORN_nyu.DORN(pretrained=pretrained,freeze=freeze,output_size=rgb_size)
     # else:
     #     print('no model based on dataset-', )
     #     exit(-1)

@@ -14,6 +14,7 @@ from torch.optim import lr_scheduler
 
 from dataloaders import nyu_dataloader
 from dataloaders.kitti_dataloader import KittiFolder
+from dataloaders.make3d_dataloader import Make3DFolder
 from dataloaders.path import Path
 from metrics import AverageMeter, Result
 import utils
@@ -23,11 +24,18 @@ import torch.nn as nn
 
 import numpy as np
 import random
+import config
 
 from network.get_models import get_models
+from network import DORN_nyu
 
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1"  # use single GPU
 #os.environ["CUDA_VISIBLE_DEVICES"] = "5,6,7"
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+
+np.random.seed(0)
+random.seed(0)
 
 args = utils.parse_command()
 print(args)
@@ -42,18 +50,31 @@ best_result.set_to_worst()
 
 
 def create_loader(args):
+    data_dir = r'..'
     #root_dir = Path.db_root_dir(args.dataset)
     if args.dataset == 'kitti':
-        # train_set = KittiFolder(root_dir, mode='train', size=(385, 513))
-        # test_set = KittiFolder(root_dir, mode='test', size=(385, 513))
-        # train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True,
-        #                                            num_workers=args.workers, pin_memory=True)
-        # test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False,
-        #                                           num_workers=args.workers, pin_memory=True)
-        # return train_loader, test_loader
-        ## TODO implement KITTI
-        assert "Not implemented"
+        data_dir = os.path.join(data_dir,'data')
+        train_set = KittiFolder(data_dir, mode='train', size=config.kitti_output_size)
+        test_set = KittiFolder(data_dir, mode='test', size=config.kitti_output_size)
+        train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True,
+                                                   num_workers=args.workers, pin_memory=True)
+        test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False,
+                                                  num_workers=args.workers, pin_memory=True)
+        return train_loader, test_loader
+
+    elif args.dataset == 'make3d':
+        data_dir = os.path.join(data_dir,'data',args.dataset)
+        train_set = Make3DFolder(data_dir, mode='train', size=config.make3d_output_size)
+        test_set = Make3DFolder(data_dir, mode='test', size=config.make3d_output_size)
+        train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True,
+                                                   num_workers=args.workers, pin_memory=True)
+        test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False,
+                                                  num_workers=args.workers, pin_memory=True)
+        return train_loader, test_loader
+
     else:
+        valdir = os.path.join(data_dir, 'data', args.dataset, 'val')
+        traindir = os.path.join(data_dir, 'data', args.dataset, 'train')
         # traindir = os.path.join(root_dir, 'train')
         # if os.path.exists(traindir):
         #     print('Train dataset "{}" is existed!'.format(traindir))
@@ -69,9 +90,6 @@ def create_loader(args):
         #     exit(-1)
         # Data loading code
         print("=> creating data loaders...")
-        data_dir = r'/media/vasp/Data1/Users/vmhp806'
-        valdir = os.path.join(data_dir, 'data', args.dataset, 'val')
-        traindir = os.path.join(data_dir, 'data', args.dataset, 'train')
 
         train_set = nyu_dataloader.NYUDataset(traindir, type='train')
         val_set = nyu_dataloader.NYUDataset(valdir, type='val')
@@ -123,7 +141,17 @@ def main():
         torch.cuda.empty_cache()
     else:
         print("=> creating Model")
-        model = get_models(args.dataset)
+
+        if args.dataset == 'kitti':
+            rgb_size = config.kitti_output_size
+            total_label = config.kitti_K
+        elif args.dataset == 'make3d':
+            rgb_size = config.make3d_output_size
+            total_label = config.make3d_K
+        else:
+            rgb_size = config.nyu_output_size
+            total_label = config.nyu_K
+        model = DORN_nyu.DORN(pretrained=True, output_size=rgb_size,total_label=total_label)
         print("=> model created.")
         start_epoch = 0
 
@@ -132,7 +160,6 @@ def main():
                         {'params': model.get_10x_lr_params(), 'lr': args.lr * 10}]
 
         optimizer = torch.optim.SGD(train_params, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
-        #optimizer = torch.optim.Adam(train_params, lr=args.lr)
 
         # You can use DataParallel() whether you use Multi-GPUs or not
         if args.gpu:
@@ -231,7 +258,7 @@ def train(train_loader, model, criterion, optimizer, epoch, logger):
         end = time.time()
 
         with torch.autograd.detect_anomaly():
-            pred_d, pred_ord = model(input)  # @wx 注意输出
+            pred_d, pred_ord = model(input)
             target_c,valid_mask = utils.get_labels_sid(args, target)  # using sid, discretize the groundtruth
             loss = criterion(pred_ord, target_c,valid_mask)
             optimizer.zero_grad()

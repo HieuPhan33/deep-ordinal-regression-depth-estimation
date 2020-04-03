@@ -14,10 +14,10 @@ import sys
 sys.path.append('../utils')
 from tool.utils import *
 
-data_path = '/home/data/UnsupervisedDepth/KITTI-raw/kitti_raw_data/'
-train_depth_dir = '/home/data/UnsupervisedDepth/KITTI-raw/train_gt16bit/'
-test_depth_dir = '/home/data/UnsupervisedDepth/KITTI-raw/test_gt16bit/'
-val_depth_dir = '/home/data/UnsupervisedDepth/KITTI-raw/val_gt16bit/'
+data_path = '../../data/kitti_raw_data/'
+train_depth_dir = '../../data/kitti/train_gt16bit/'
+test_depth_dir = '../../data/kitti/test_gt16bit/'
+val_depth_dir = '../../data/kitti/val_gt16bit/'
 
 if not os.path.isdir(train_depth_dir):
     os.makedirs(train_depth_dir)
@@ -55,6 +55,7 @@ val_rgbd_fid = open('eigen_val_pairs.txt', 'w')
 
 
 print('Processing training images')
+min_,max_ = 10000,-1
 for in_idx in tqdm(range(len(train_lines))):
     # print(train_lines[in_idx])
 
@@ -67,17 +68,19 @@ for in_idx in tqdm(range(len(train_lines))):
     # print('cams:', cams)
     camera_id = cams[0]
     depth = generate_depth_map(gt_calib[0], gt_file[0], im_size[0], camera_id, False, True)
-    print(depth)
-    print(np.max(depth), np.min(depth))
+    #print(depth)
+    #print(np.max(depth), np.min(depth))
 
     im_depth_16 = (depth * 100).astype(np.uint16)
-    print(np.max(im_depth_16), np.min(im_depth_16))
+    min_ = min(min_,np.min(im_depth_16))
+    max_ = max(max_,np.max(im_depth_16))
+    #print(np.max(im_depth_16), np.min(im_depth_16))
 
     filename2 = os.path.join(train_depth_dir, img_name)
     file_line = os.path.join('kitti_raw_data', img_lines0) + ' ' + os.path.join('train_gt16bit', img_name) + '\n'
     train_rgbd_fid.write(file_line)
     cv2.imwrite(filename2, im_depth_16)
-    exit(-1)
+    #exit(-1)
 
 
 print('Processing test images')

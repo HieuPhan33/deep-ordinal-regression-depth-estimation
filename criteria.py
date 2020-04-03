@@ -140,7 +140,7 @@ class ordLoss(nn.Module):
         mask_0 = (K <= target).detach() & valid_mask # Mask all pixel < rank K as 0
         mask_1 = (K > target).detach() & valid_mask
 
-        one = torch.ones(ord_labels[mask_1 & valid_mask].size())
+        one = torch.ones(ord_labels[mask_1].size())
         if torch.cuda.is_available() and self.args.gpu:
             one = one.cuda()
             # mask_0 = mask_0.detach()

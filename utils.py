@@ -64,15 +64,19 @@ def get_depth_sid(args, labels):
     if args.dataset == 'kitti':
         min = 0.001
         max = 80.0
-        K = 71.0
+        K = config.kitti_K
     elif 'nyu' in args.dataset:
         min = 0.02
         max = 10.0
-        K = 68.0
+        K = config.nyu_K
     elif 'uow_dataset' in args.dataset:
-        min = 0.001
+        min = 0.6
         max = 156
-        K = config.K
+        K = config.nyu_K
+    elif 'make3d' in args.dataset:
+        min = 0.0091
+        max = 0.8137
+        K = config.make3d_K
     else:
         print('No Dataset named as ', args.dataset)
 
@@ -96,15 +100,19 @@ def get_labels_sid(args, depth):
     if args.dataset == 'kitti':
         alpha = 0.001
         beta = 80.0
-        K = 71.0
+        K = config.kitti_K
     elif 'nyu' in args.dataset:
         alpha = 0.02
         beta = 10.0
-        K = 68.0
+        K = config.kitti_K
     elif 'uow_dataset' in args.dataset:
-        alpha = 0.001
+        alpha = 0.6
         beta = 156
-        K = config.K
+        K = config.nyu_K
+    elif 'make3d' in args.dataset:
+        alpha = 0.0091
+        beta = 0.8137
+        K = config.make3d_K
     else: # 0.1 0.9   -> 0 1    => 2k = 0.1 -> -0.1
         print('No Dataset named as ', args.dataset)
 
@@ -118,6 +126,8 @@ def get_labels_sid(args, depth):
         K = K.cuda()
 
     labels = K * torch.log(depth / alpha) / torch.log(beta / alpha)
+    if any(label < 0 and label != float("-inf") for label in labels.reshape(-1)):
+        print('hi')
     # if torch.cuda.is_available() and args.gpu:
     #     labels = labels.cuda()
     # return labels.int()
