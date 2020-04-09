@@ -119,8 +119,8 @@ def get_labels_sid(args, depth):
     else: # 0.1 0.9   -> 0 1    => 2k = 0.1 -> -0.1
         print('No Dataset named as ', args.dataset)
 
-    alpha = torch.tensor(alpha)
-    beta = torch.tensor(beta)
+    alpha = torch.tensor(alpha,dtype=torch.float32)
+    beta = torch.tensor(beta,dtype=torch.float32)
     K = torch.tensor(K)
 
     if torch.cuda.is_available() and args.gpu:
@@ -135,7 +135,7 @@ def get_labels_sid(args, depth):
     # if torch.cuda.is_available() and args.gpu:
     #     labels = labels.cuda()
     # return labels.int()
-    valid_mask = depth > alpha & depth < beta
+    valid_mask = (depth >= alpha) & (depth <= beta)
     return torch.round(labels).int(), valid_mask
 
 
