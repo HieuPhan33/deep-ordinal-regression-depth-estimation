@@ -70,12 +70,13 @@ def get_depth_sid(args, labels):
         max = 10.0
         K = config.nyu_K
     elif 'uow_dataset' in args.dataset:
-        min = 0.6
+        min = 0.001
         max = 156
-        K = config.nyu_K
+        K = config.uow_K
     elif 'make3d' in args.dataset:
-        min = 0.0091
-        max = 0.8137
+        min = 0.91
+        #max = 0.8137
+        max = 70
         K = config.make3d_K
     else:
         print('No Dataset named as ', args.dataset)
@@ -108,10 +109,12 @@ def get_labels_sid(args, depth):
     elif 'uow_dataset' in args.dataset:
         alpha = 0.6
         beta = 156
-        K = config.nyu_K
+        K = config.uow_K
     elif 'make3d' in args.dataset:
-        alpha = 0.0091
-        beta = 0.8137
+        # alpha = 0.0091
+        # beta = 0.8137
+        alpha = 0.91
+        beta = 70
         K = config.make3d_K
     else: # 0.1 0.9   -> 0 1    => 2k = 0.1 -> -0.1
         print('No Dataset named as ', args.dataset)
@@ -126,13 +129,14 @@ def get_labels_sid(args, depth):
         K = K.cuda()
 
     labels = K * torch.log(depth / alpha) / torch.log(beta / alpha)
+
     if any(label < 0 and label != float("-inf") for label in labels.reshape(-1)):
-        print('hi')
+        print('warning : got negative label')
     # if torch.cuda.is_available() and args.gpu:
     #     labels = labels.cuda()
     # return labels.int()
-    valid_mask = depth > 0
-    return labels.int(), valid_mask
+    valid_mask = depth > alpha & depth < beta
+    return torch.round(labels).int(), valid_mask
 
 
 # save checkpoint

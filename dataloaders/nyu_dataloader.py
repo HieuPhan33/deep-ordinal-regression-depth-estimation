@@ -75,7 +75,7 @@ if __name__ == '__main__':
         val_set, batch_size=8, shuffle=False, pin_memory=True)
     c = Counter()
     max_depth, min_depth = -1, 10000
-    for im, gt in tqdm(train_loader):
+    for im, gt in tqdm(val_loader):
         # print(im)
         valid = (gt > 0.0)
         max_depth = max(max_depth, torch.max(gt[valid]))
@@ -87,7 +87,7 @@ if __name__ == '__main__':
     print(min_depth, '-', max_depth)
     #c = Counter({62: 23994577, 61: 23183834, 63: 22670103, 60: 22313719, 64: 20980929, 59: 19317232, 65: 18881079, -2147483648: 17137674, 66: 16685405, 67: 14848254, 58: 13287308, 68: 13199124, 69: 11732497, 70: 10237682, 71: 9000830, 72: 7654900, 57: 7321212, 73: 6868126, 74: 5969406, 75: 4998240, 56: 4646872, 76: 4263847, 55: 3186416, 77: 3167009, 54: 2454062, 53: 1568245, 78: 1546472, 52: 1231918, 51: 902041, 48: 665191, 50: 624923, 49: 499470, 79: 400990, 45: 204760, 44: 131008, 43: 111338, 46: 3829})
     print(c)
-    sns.barplot(x=list(c.keys()),y=list(c.values()))
+    sns.lineplot(x=list(c.keys()),y=list(c.values()))
     plt.savefig('depth_distribution.png',dpi=200)
     plt.show()
     #print(min_depth,'-',max_depth)

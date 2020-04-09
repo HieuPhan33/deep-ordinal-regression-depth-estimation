@@ -2,6 +2,8 @@
 kitti_K=71
 nyu_K=80
 make3d_K=80
+uow_K=46
+uow_output_size = (257, 353)
 # kitti_output_size = (385, 513) -> 24,33
 kitti_output_size=(224,448) # 14 , 28
 nyu_output_size=(257, 353)

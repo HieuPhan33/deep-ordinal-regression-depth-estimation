@@ -127,7 +127,7 @@ class Make3DFolder(Dataset):
         gt_ = np.array(gt_).astype(np.float32)
 
         im_ /= 255.0
-        gt_ /= 100.0
+        #gt_ /= 100.0
         im_ = to_tensor(im_)
         gt_ = to_tensor(gt_)
 

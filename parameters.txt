@@ -1,0 +1,3 @@
+python main.py --dataset uow_dataset_full -b 8 --gpu 0 --epochs 40
+PC 5: /media/vasp/Data2/Users/vmhp806/depth-estimation
+PC 6: /media/vasp/Data1/Users/vmhp806

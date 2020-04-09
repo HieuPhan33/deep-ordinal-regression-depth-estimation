@@ -54,7 +54,7 @@ class SceneUnderstandingModule(nn.Module):
         #upsampling_size = (33,45)
         upsampling_size = tuple(int(i*2) for i in input_size)
         #total_ord_label = 90 # For uow
-        self.channels = 2048
+        self.channels = 512
         self.encoder = FullImageEncoder(self.channels,self.input_size,
                                         output_size=upsampling_size)
         #total_K = (total_ord_label-1)*2 For probabilistic inference
@@ -144,8 +144,8 @@ class DORN(nn.Module):
         #self.feature_extractor = resnet101(pretrained=pretrained)
         #self.feature_extractor = models.resnet18(pretrained=pretrained)
         #self.feature_extractor = resnet18(pretrained=pretrained)
-        #model = models.resnet18(pretrained=True)
-        model = models.resnet50(pretrained=pretrained)
+        model = models.resnet18(pretrained=True)
+        #model = models.resnet50(pretrained=pretrained)
         self.feature_extractor = torch.nn.Sequential(*(list(model.children())[:-2]))
         self.aspp_module = SceneUnderstandingModule(output_size,self.encoder_output_size,total_label)
         self.orl = OrdinalRegressionLayer()

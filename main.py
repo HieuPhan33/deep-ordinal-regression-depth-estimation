@@ -148,6 +148,9 @@ def main():
         elif args.dataset == 'make3d':
             rgb_size = config.make3d_output_size
             total_label = config.make3d_K
+        elif 'uow_dataset' in args.dataset:
+            rgb_size = config.uow_output_size
+            total_label = config.uow_K
         else:
             rgb_size = config.nyu_output_size
             total_label = config.nyu_K
