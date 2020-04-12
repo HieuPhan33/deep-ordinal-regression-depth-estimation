@@ -91,8 +91,8 @@ class SceneUnderstandingModule(nn.Module):
         # )
         self.concat_process = nn.Sequential(
             nn.Dropout2d(p=0.5), 
-            ChannelSELayer(num_channels=512*5,reduction_ratio=2), 
-            #ChannelSpatialSELayer(num_channels=512*5,reduction_ratio=2),
+            #ChannelSELayer(num_channels=512*5,reduction_ratio=3), 
+            ChannelSpatialSELayer(num_channels=512*5,reduction_ratio=3),
             #SpatialSELayer(num_channels=512*5),
             #ChannelwiseLocalAttention(pooling_output_size=(16,22),n_heads=4),
             #AugmentedConv(in_channels=512*5,out_channels=512*5,kernel_size=3, dk=40, dv=4, Nh=2, relative=False, stride=1),
@@ -133,7 +133,8 @@ class DORN(nn.Module):
         #self.feature_extractor = resnet101(pretrained=pretrained)
         #self.feature_extractor = models.resnet18(pretrained=pretrained)
         #self.feature_extractor = resnet18(pretrained=pretrained)
-        model = models.resnet18(pretrained=True)
+        #model = models.resnet18(pretrained=True)
+        model = models.resnet50(pretrained=True)
         self.feature_extractor = torch.nn.Sequential(*(list(model.children())[:-2]))
         self.aspp_module = SceneUnderstandingModule()
         self.orl = OrdinalRegressionLayer()

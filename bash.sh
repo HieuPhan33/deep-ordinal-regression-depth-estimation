@@ -22,10 +22,10 @@
 # done
 
 
-for K in 14 24 26
+for K in 83 84 85
 do
 	echo "K=$K" > config.py
-    python main.py --dataset uow_dataset_full -b 6 --gpu 0 --epochs 20
+    python main.py --dataset uow_dataset_full -b 8 --gpu 0 --epochs 30
 done
 
 # for K in 12 15 17 72 73 74 82 83 85
