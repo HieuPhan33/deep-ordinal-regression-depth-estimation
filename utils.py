@@ -107,7 +107,7 @@ def get_labels_sid(args, depth):
         beta = 10.0
         K = config.kitti_K
     elif 'uow_dataset' in args.dataset:
-        alpha = 0.6
+        alpha = 0.001
         beta = 156
         K = config.uow_K
     elif 'make3d' in args.dataset:

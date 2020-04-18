@@ -19,7 +19,7 @@ class FullImageEncoder(nn.Module):
         super(FullImageEncoder, self).__init__()
         self.channels = channels
         self.input_size = input_size
-        self.r = 2
+        self.r = 3
         self.global_pooling = nn.AvgPool2d(kernel_size=self.r
                                            , stride=self.r)  # KITTI 16 16
         self.dropout = nn.Dropout2d(p=0.5)
@@ -35,6 +35,10 @@ class FullImageEncoder(nn.Module):
         x1 = self.global_pooling(x)
         # print('# x1 size:', x1.size())
         x2 = self.dropout(x1)
+        x2_size = self.channels * (self.input_size[0] // self.r) * (self.input_size[1] // self.r)
+        assert x2_size == (x2.shape[1] * x2.shape[2] * x2.shape[3]), "Input size is {}, while parameters are {}".format(
+            x.shape, (self.channels, self.input_size))
+
         x3 = x2.view(-1, self.channels * (self.input_size[0]//self.r) * (self.input_size[1]//self.r)) # Flatten out ready to leaarn globally by FC
         x4 = self.relu(self.global_fc(x3))
         # print('# x4 size:', x4.size())
@@ -50,7 +54,7 @@ class SceneUnderstandingModule(nn.Module):
     def __init__(self,output_size,input_size,total_label):
         super(SceneUnderstandingModule, self).__init__()
         total_ord_label = total_label # For NYU
-        self.input_size= input_size
+        self.input_size= 58,44
         #upsampling_size = (33,45)
         upsampling_size = tuple(int(i*2) for i in input_size)
         #total_ord_label = 90 # For uow
@@ -144,14 +148,14 @@ class DORN(nn.Module):
         #self.feature_extractor = resnet101(pretrained=pretrained)
         #self.feature_extractor = models.resnet18(pretrained=pretrained)
         #self.feature_extractor = resnet18(pretrained=pretrained)
-        model = models.resnet50(pretrained=True)
+        model = torch.hub.load('pytorch/vision:v0.4.0', 'fcn_resnet101', pretrained=True)
         #model = models.resnet50(pretrained=pretrained)
         self.feature_extractor = torch.nn.Sequential(*(list(model.children())[:-2]))
         self.aspp_module = SceneUnderstandingModule(output_size,self.encoder_output_size,total_label)
         self.orl = OrdinalRegressionLayer()
 
     def forward(self, x):
-        x1 = self.feature_extractor(x)
+        x1 = self.feature_extractor(x)['out']
         # print(x1.size())
         x2 = self.aspp_module(x1)
         # print('DORN x2 size:', x2.size())

@@ -1,43 +1,20 @@
-# DORN implemented in Pytorch 0.4.1
+# DORN implemented in Pytorch 1.0.0
 
 
 ### Introduction
-This is a PyTorch(0.4.1) implementation of [Deep Ordinal Regression Network for Monocular Depth Estimation](http://arxiv.org/abs/1806.02446). At present, we can provide train script in NYU Depth V2 dataset and Kitti Dataset!
+This is a PyTorch 1.0.0 for DORN with self-attention module
+### Configuration:
+You can set the total_ordinal_numbers, image_size for each type of dataset in ``config.py``
 
-Note: we modify the ordinal layer using matrix operation, making trianing faster.
+### Prepare dataset:
+Place data in `data_dir`: `root_dir/data/dataset_name` <br>
+Organize train and val in `data_dir/train` and `data_dir/val`
+dataset_name must be 'nyu','make3d','kitti','uow_dataset_full', please name your folders appropriately <br>
+Change variable `data_dir` on line 53 in `main.py` as `root_dir` <br>
+Link for make3d and uow: www.kaggle.com/dataset/b0fc6abcf37d10d62182779cc37187b52016aaa9b81fe824bd76c2ab4661f279 <br>
 
-### TODO
-- [x] DORN model in nyu and kitti
-- [x] Training DORN on nyu and kitti datasets
-- [ ] Results evaluation on nyu test set
-- [x] the script to generate nyu and kitti dataset.
-- [x] Calculate alpha and beta in nyu dataset and kitti dataset
-- [x] Realize the ordinal loss in paper 
-
-### Datasets
-
-#### NYU Depth V2
-DORN need to use all the Images (about 120k) in the dataset, but if you just want to test the code, you can use the nyu_depth_v2_labeled.mat and turn it to a h5 file. The convert script is 'create_nyu_h5.py' and you need to change the file paths to yours.
-
- - Modify create_nyu_h5.py with your path and run the script.
- 
-  ```bash
-  python create_nyu_h5.py
-  ```
- 
-#### Kitti
-The kitti dataset contains 23488 images from 32 scenes for training and 697 images from the remaining 29 scenes for testing. 
- - Raw dataset (about 175 GB) can be downloaded by running:
-  ```bash
-  wget -i kitti_archives_to_download.txt -P ~/kitti-raw-data/
-  ```
- - Unzip the compressed files:
-  ```bash
-  cd ~/kitti-raw-data
-  find . -name '*.zip' -exec unzip {} \;
-  ```
- - Run the script to generate the kitti_ground_truth
-  ```
-  python gen_kitti_dataset.py
-  ```
-
+### Training:
+python main.py --batch-size b -- dataset dataset_name --gpu 0 --epochs 20
+Set b=4 to avoid run-out-of-memory
+Start with make3d and uow_dataset_full
+dataset_name must be either 'nyu','make3d','kitti','uow_dataset_full'
